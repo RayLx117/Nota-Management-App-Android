@@ -66,9 +66,10 @@ fun ListScreen(reminders: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Un
     val upcoming = reminders.filterNot { it.isActive }.sortedWith(
         compareByDescending<Reminder> { it.enabled }.thenBy { it.snoozedUntil ?: it.nextTriggerAt ?: Long.MAX_VALUE },
     )
+    val sel = rememberSelection(reminders.map { it.id }.toSet())
     Box(Modifier.fillMaxSize().background(Nota.Bg)) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 110.dp)) {
-            item { Shelf(pinned, onEdit) }
+            item { Shelf(pinned, sel, onEdit) }
             item {
                 Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     PermissionCards()
@@ -88,9 +89,9 @@ fun ListScreen(reminders: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Un
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 )
             }
-            items(upcoming, key = { it.id }) { r -> UpcomingRow(r, onClick = { onEdit(r.id) }) }
+            items(upcoming, key = { it.id }) { r -> UpcomingRow(r, sel, onClick = { onEdit(r.id) }) }
         }
-        AddButton(
+        if (!sel.active) AddButton(
             onClick = onAdd,
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
         )
@@ -114,7 +115,7 @@ fun AddButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
 
 /** The top "shelf": reminders currently sitting in your notification bar. */
 @Composable
-private fun Shelf(pinned: List<Reminder>, onEdit: (Int) -> Unit) {
+private fun Shelf(pinned: List<Reminder>, sel: Selection, onEdit: (Int) -> Unit) {
     Column(
         Modifier.fillMaxWidth()
             .shadow(16.dp, RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
@@ -123,7 +124,8 @@ private fun Shelf(pinned: List<Reminder>, onEdit: (Int) -> Unit) {
             .statusBarsPadding()
             .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 18.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        if (sel.active) SelectionBar(sel, "reminder", Modifier.padding(top = 0.dp))
+        else Row(verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.Top) {
                 Text("Reminders", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp, color = Nota.Text)
                 Dot(size = 9.dp, modifier = Modifier.padding(start = 2.dp, top = 6.dp))
@@ -141,27 +143,28 @@ private fun Shelf(pinned: List<Reminder>, onEdit: (Int) -> Unit) {
             Text("Nothing waiting on you right now.", style = MaterialTheme.typography.bodyMedium, color = Nota.Sub)
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                pinned.forEach { PinnedBar(it, onClick = { onEdit(it.id) }) }
+                pinned.forEach { PinnedBar(it, sel, onClick = { onEdit(it.id) }) }
             }
         }
     }
 }
 
 @Composable
-private fun PinnedBar(r: Reminder, onClick: () -> Unit) {
+private fun PinnedBar(r: Reminder, sel: Selection, onClick: () -> Unit) {
     val ctx = LocalContext.current
     Box {
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Nota.Raised).clickable(onClick = onClick)
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Nota.Raised).selectable(sel, r.id, onClick)
                 .padding(start = 16.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            if (sel.active) SelectCircle(sel.has(r.id))
             Column(Modifier.weight(1f)) {
                 Text(r.title, style = MaterialTheme.typography.titleMedium, color = Nota.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(Describe.pinnedLine(r), style = MaterialTheme.typography.bodySmall, color = Nota.Sub)
             }
-            RoundButton("✓", filled = true, onClick = { ReminderEngine.done(ctx, r.id) })
+            if (!sel.active) RoundButton("✓", filled = true, onClick = { ReminderEngine.done(ctx, r.id) })
         }
         Dot(
             size = 14.dp,
@@ -172,10 +175,12 @@ private fun PinnedBar(r: Reminder, onClick: () -> Unit) {
 
 /** A row in "Coming up": coloured line for the repeat type, time on the right. */
 @Composable
-private fun UpcomingRow(r: Reminder, onClick: () -> Unit) {
+private fun UpcomingRow(r: Reminder, sel: Selection, onClick: () -> Unit) {
     val alpha = if (r.enabled) 1f else 0.45f
-    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp).alpha(alpha)) {
+    Column(Modifier.fillMaxWidth().selectable(sel, r.id, onClick).padding(horizontal = 16.dp)) {
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (sel.active) SelectCircle(sel.has(r.id), Modifier.padding(end = 12.dp))
+            Row(Modifier.weight(1f).fillMaxHeight().alpha(alpha), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.width(5.dp).fillMaxHeight().clip(RoundedCornerShape(3.dp)).background(Nota.accent(r.repeat)))
             Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
                 Text(r.title, style = MaterialTheme.typography.titleMedium, color = Nota.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -188,7 +193,7 @@ private fun UpcomingRow(r: Reminder, onClick: () -> Unit) {
             }
             // Pin: put it in the notification bar right now (only if it uses notifications).
             // Same round outline style as the snooze button on the shelf.
-            if (r.behavior.notification) {
+            if (r.behavior.notification && !sel.active) {
                 val ctx = LocalContext.current
                 Box(
                     Modifier.padding(start = 12.dp).size(42.dp).clip(CircleShape).border(2.dp, Nota.Outline, CircleShape)
@@ -197,6 +202,7 @@ private fun UpcomingRow(r: Reminder, onClick: () -> Unit) {
                 ) {
                     Icon(painterResource(R.drawable.ic_pin), contentDescription = "Pin", tint = Nota.Mint, modifier = Modifier.size(18.dp))
                 }
+            }
             }
         }
         HorizontalDivider(color = Nota.Line)

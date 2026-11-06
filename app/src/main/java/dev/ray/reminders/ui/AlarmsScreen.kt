@@ -33,13 +33,17 @@ import dev.ray.reminders.data.Reminder
 @Composable
 fun AlarmsScreen(alarms: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Unit) {
     val sorted = alarms.sortedWith(compareBy<Reminder> { it.hour * 60 + it.minute }.thenBy { it.id })
+    val sel = rememberSelection(alarms.map { it.id }.toSet())
     Box(Modifier.fillMaxSize().background(Nota.Bg)) {
         LazyColumn(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 110.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item { PageHeader("Alarms", Modifier.statusBarsPadding()) }
+            item {
+                if (sel.active) SelectionBar(sel, "alarm", Modifier.statusBarsPadding())
+                else PageHeader("Alarms", Modifier.statusBarsPadding())
+            }
             item { FullScreenWarning() }
             if (sorted.isEmpty()) item {
                 Text(
@@ -47,23 +51,24 @@ fun AlarmsScreen(alarms: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Uni
                     modifier = Modifier.padding(vertical = 12.dp),
                 )
             }
-            items(sorted, key = { it.id }) { a -> AlarmRow(a, onClick = { onEdit(a.id) }) }
+            items(sorted, key = { it.id }) { a -> AlarmRow(a, sel, onClick = { onEdit(a.id) }) }
         }
-        AddButton(onClick = onAdd, modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp))
+        if (!sel.active) AddButton(onClick = onAdd, modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp))
     }
 }
 
 @Composable
-private fun AlarmRow(a: Reminder, onClick: () -> Unit) {
+private fun AlarmRow(a: Reminder, sel: Selection, onClick: () -> Unit) {
     val ctx = LocalContext.current
     val ringing = a.isActive
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
             .background(if (ringing) Nota.Raised else Nota.Shelf)
-            .clickable(onClick = onClick)
+            .selectable(sel, a.id, onClick)
             .padding(start = 18.dp, end = 14.dp, top = 14.dp, bottom = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (sel.active) SelectCircle(sel.has(a.id), Modifier.padding(end = 14.dp))
         Column(Modifier.weight(1f).alpha(if (a.enabled) 1f else 0.45f)) {
             Text(
                 Describe.time(a), fontFamily = Nota.Mono, fontWeight = FontWeight.SemiBold, fontSize = 34.sp,
@@ -78,7 +83,7 @@ private fun AlarmRow(a: Reminder, onClick: () -> Unit) {
                 )
             }
         }
-        Switch(
+        if (!sel.active) Switch(
             checked = a.enabled, onCheckedChange = { ReminderEngine.setEnabled(ctx, a.id, it) },
             colors = notaSwitchColors(),
         )
