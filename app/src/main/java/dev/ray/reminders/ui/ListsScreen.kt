@@ -75,6 +75,7 @@ import dev.ray.reminders.data.ListsStore
 import dev.ray.reminders.data.NotaList
 import dev.ray.reminders.data.Status
 import kotlinx.coroutines.launch
+import androidx.compose.ui.graphics.drawscope.clipRect
 import dev.ray.reminders.alarm.ListAlarms
 import androidx.compose.foundation.layout.offset
 import androidx.compose.material3.DatePicker
@@ -376,8 +377,19 @@ private fun StatusItemRow(item: ListItem, color: Color, onClick: () -> Unit) {
             .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(4.dp).height(if (item.description.isBlank()) 20.dp else 36.dp).clip(RoundedCornerShape(2.dp)).background(color))
-        Column(Modifier.padding(start = 12.dp)) {
+        Box(Modifier.width(4.dp).height(if (item.description.isBlank() || item.notesRight) 20.dp else 36.dp).clip(RoundedCornerShape(2.dp)).background(color))
+        if (item.notesRight) {
+            // Name on the left, notes on the right of the same line.
+            Text(
+                item.text, style = MaterialTheme.typography.titleMedium, color = Nota.Text, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 12.dp).weight(1f, fill = false),
+            )
+            if (item.description.isNotBlank()) Text(
+                item.description, style = MaterialTheme.typography.bodyMedium, color = Nota.Sub, maxLines = 2,
+                overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                modifier = Modifier.weight(1f).padding(start = 12.dp),
+            )
+        } else Column(Modifier.padding(start = 12.dp)) {
             Text(item.text, style = MaterialTheme.typography.titleMedium, color = Nota.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (item.description.isNotBlank()) Text(
                 item.description, style = MaterialTheme.typography.bodySmall, color = Nota.Sub,
@@ -478,6 +490,7 @@ private fun ItemDialog(list: NotaList, item: ListItem, onDismiss: () -> Unit, on
     val ctx = LocalContext.current
     var text by remember { mutableStateOf(item.text) }
     var description by remember { mutableStateOf(item.description) }
+    var notesRight by remember { mutableStateOf(item.notesRight) }
     var sections by remember { mutableStateOf(item.sections) }
     var dueDay by remember { mutableStateOf(item.dueDay) }
     var dueMinute by remember { mutableStateOf(item.dueMinute) }
@@ -499,8 +512,14 @@ private fun ItemDialog(list: NotaList, item: ListItem, onDismiss: () -> Unit, on
                     shape = RoundedCornerShape(16.dp), colors = fieldColors(), modifier = Modifier.fillMaxWidth(),
                 )
                 if (sectioned) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                        Text("NOTES POSITION", style = Nota.Label, color = Nota.Sub, modifier = Modifier.weight(1f))
+                        LayoutIcon(right = false, selected = !notesRight) { notesRight = false }
+                        Spacer(Modifier.width(8.dp))
+                        LayoutIcon(right = true, selected = notesRight) { notesRight = true }
+                    }
                     OutlinedTextField(
-                        value = description, onValueChange = { description = it }, label = { Text("Description") },
+                        value = description, onValueChange = { description = it }, label = { Text("Notes") },
                         minLines = 2, maxLines = 5,
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                         shape = RoundedCornerShape(16.dp), colors = fieldColors(), modifier = Modifier.fillMaxWidth(),
@@ -546,7 +565,7 @@ private fun ItemDialog(list: NotaList, item: ListItem, onDismiss: () -> Unit, on
                 onClick = {
                     onSave(
                         item.copy(
-                            text = text.trim(), description = description.trim(), statusId = null,
+                            text = text.trim(), description = description.trim(), notesRight = notesRight, statusId = null,
                             statusIds = list.statuses.map { it.id }.filter { it in sections },
                             dueDay = dueDay, dueMinute = dueMinute, remindBefore = if (dueDay == null) null else remind,
                         ),
@@ -592,6 +611,30 @@ private fun timeText(ctx: android.content.Context, minutes: Int): String {
         set(java.util.Calendar.HOUR_OF_DAY, minutes / 60); set(java.util.Calendar.MINUTE, minutes % 60)
     }
     return android.text.format.DateFormat.getTimeFormat(ctx).format(cal.time)
+}
+
+/** Notes position choice: a box with its bottom (below the name) or right side (beside it) filled in. */
+@Composable
+private fun LayoutIcon(right: Boolean, selected: Boolean, onClick: () -> Unit) {
+    val tint = if (selected) Nota.Mint else Nota.Sub
+    Box(
+        Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(if (selected) Nota.Raised else Color.Transparent)
+            .border(1.5.dp, if (selected) Nota.Mint else Nota.Outline, RoundedCornerShape(12.dp)).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.foundation.Canvas(Modifier.size(24.dp)) {
+            val stroke = 2.dp.toPx()
+            val r = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx())
+            val fill = if (right) androidx.compose.ui.geometry.Rect(size.width * 0.55f, 0f, size.width, size.height)
+            else androidx.compose.ui.geometry.Rect(0f, size.height * 0.55f, size.width, size.height)
+            clipRect(fill.left, fill.top, fill.right, fill.bottom) { drawRoundRect(tint, cornerRadius = r) }
+            drawRoundRect(
+                tint, topLeft = androidx.compose.ui.geometry.Offset(stroke / 2, stroke / 2),
+                size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke), cornerRadius = r,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(stroke),
+            )
+        }
+    }
 }
 
 /** A tappable grey row in the item dialog, with an optional ✕ to clear it. */

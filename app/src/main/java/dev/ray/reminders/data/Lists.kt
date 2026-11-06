@@ -20,6 +20,8 @@ data class ListItem(
     val id: Int,
     val text: String,
     val description: String = "",
+    /** Sectioned lists: show the notes to the right of the name instead of below it. */
+    val notesRight: Boolean = false,
     val checked: Boolean = false,
     /** Legacy single section; read through [sections]. */
     val statusId: Int? = null,
