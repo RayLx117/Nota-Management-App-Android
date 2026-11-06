@@ -63,7 +63,7 @@ class WidgetConfigActivity : ComponentActivity() {
                                 .padding(16.dp),
                         ) {
                             Text(
-                                if (list.type == ListType.CHECKLIST) "CHECKLIST" else "SECTIONED LIST",
+                                if (list.type == ListType.CHECKLIST) "CHECKLIST" else "CATEGORIZED LIST",
                                 style = Nota.Label, color = Nota.Sub,
                             )
                             Text(list.name, fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = Nota.Text)

@@ -193,7 +193,7 @@ private fun ListCard(list: NotaList, store: ListsStore) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        if (list.type == ListType.CHECKLIST) "CHECKLIST" else "SECTIONED LIST",
+                        if (list.type == ListType.CHECKLIST) "CHECKLIST" else "CATEGORIZED LIST",
                         style = Nota.Label, color = Nota.Sub,
                     )
                     Text(
@@ -217,7 +217,7 @@ private fun ListCard(list: NotaList, store: ListsStore) {
                     DropdownMenu(menu, onDismissRequest = { menu = false }, containerColor = Nota.Raised) {
                         DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; renaming = true })
                         if (list.type == ListType.STATUS) {
-                            DropdownMenuItem(text = { Text("Edit sections") }, onClick = { menu = false; editingStatuses = true })
+                            DropdownMenuItem(text = { Text("Edit categories") }, onClick = { menu = false; editingStatuses = true })
                         }
                         DropdownMenuItem(
                             text = { Text("Delete list", color = Nota.Error) },
@@ -346,9 +346,9 @@ private fun StatusBody(
 ) {
     if (list.statuses.isEmpty()) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Add your sections first.", style = MaterialTheme.typography.bodyLarge, color = Nota.Sub)
+            Text("Add your categories first.", style = MaterialTheme.typography.bodyLarge, color = Nota.Sub)
             Spacer(Modifier.height(14.dp))
-            SoftButton("Add sections", onClick = onEditStatuses, color = Nota.Mint, height = 46.dp)
+            SoftButton("Add categories", onClick = onEditStatuses, color = Nota.Mint, height = 46.dp)
         }
         return
     }
@@ -361,7 +361,7 @@ private fun StatusBody(
                 SectionBox(section.name, color, list.items.filter { section.id in it.sections }, onOpen) { onAdd(section.id) }
             }
         }
-        if (loose.isNotEmpty()) item(key = "none") { SectionBox("No section", Nota.Outline, loose, onOpen, onAdd = null) }
+        if (loose.isNotEmpty()) item(key = "none") { SectionBox("No category", Nota.Outline, loose, onOpen, onAdd = null) }
     }
 }
 
@@ -444,7 +444,7 @@ private fun NewListDialog(onDismiss: () -> Unit, onCreate: (String, ListType) ->
                     shape = RoundedCornerShape(16.dp), colors = fieldColors(), modifier = Modifier.fillMaxWidth(),
                 )
                 TypeOption("Checklist", "Check things off, with optional due dates", type == ListType.CHECKLIST) { type = ListType.CHECKLIST }
-                TypeOption("Sectioned list", "Group items into your own sections", type == ListType.STATUS) { type = ListType.STATUS }
+                TypeOption("Categorized list", "Group items into your own categories", type == ListType.STATUS) { type = ListType.STATUS }
             }
         },
         confirmButton = {
@@ -543,7 +543,7 @@ private fun ItemDialog(list: NotaList, item: ListItem, onDismiss: () -> Unit, on
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                         shape = RoundedCornerShape(16.dp), colors = fieldColors(), modifier = Modifier.fillMaxWidth(),
                     )
-                    Text("SECTIONS", style = Nota.Label, color = Nota.Sub, modifier = Modifier.padding(top = 4.dp))
+                    Text("CATEGORIES", style = Nota.Label, color = Nota.Sub, modifier = Modifier.padding(top = 4.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         list.statuses.forEach { s ->
                             DotChip(s.name, s.id in sections) { sections = if (s.id in sections) sections - s.id else sections + s.id }
@@ -684,7 +684,7 @@ private fun StatusesDialog(list: NotaList, store: ListsStore, onDismiss: () -> U
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Nota.Shelf,
-        title = { Text("Sections") },
+        title = { Text("Categories") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 list.statuses.forEachIndexed { i, s ->
@@ -721,7 +721,7 @@ private fun StatusesDialog(list: NotaList, store: ListsStore, onDismiss: () -> U
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                     OutlinedTextField(
                         value = draft, onValueChange = { draft = it }, singleLine = true,
-                        placeholder = { Text("New section", color = Nota.Sub) },
+                        placeholder = { Text("New category", color = Nota.Sub) },
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { add() }),
                         shape = RoundedCornerShape(14.dp), colors = fieldColors(), modifier = Modifier.weight(1f),
@@ -730,7 +730,7 @@ private fun StatusesDialog(list: NotaList, store: ListsStore, onDismiss: () -> U
                         Modifier.padding(start = 8.dp).size(44.dp).clip(CircleShape)
                             .background(if (draft.isBlank()) Nota.Raised else Nota.Mint).clickable { add() },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Add, contentDescription = "Add section", tint = if (draft.isBlank()) Nota.Sub else Nota.Ink) }
+                    ) { Icon(Icons.Filled.Add, contentDescription = "Add category", tint = if (draft.isBlank()) Nota.Sub else Nota.Ink) }
                 }
             }
         },

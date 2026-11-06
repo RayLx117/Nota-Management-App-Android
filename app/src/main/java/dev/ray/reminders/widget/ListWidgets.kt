@@ -75,7 +75,7 @@ object ListWidgets {
             return
         }
 
-        rv.setTextViewText(R.id.kind, if (list.type == ListType.CHECKLIST) "CHECKLIST" else "SECTIONED LIST")
+        rv.setTextViewText(R.id.kind, if (list.type == ListType.CHECKLIST) "CHECKLIST" else "CATEGORIZED LIST")
         rv.setTextViewText(R.id.title, list.name)
         val anyChecked = list.type == ListType.CHECKLIST && list.items.any { it.checked }
         rv.setViewVisibility(R.id.clear, if (anyChecked) View.VISIBLE else View.GONE)
@@ -134,7 +134,7 @@ object ListWidgets {
             val loose = list.items.filter { it.sections.none { id -> id in known } }
             if (loose.isNotEmpty()) {
                 val header = RemoteViews(ctx.packageName, R.layout.widget_section_header)
-                header.setTextViewText(R.id.name, "NO SECTION  ${loose.size}")
+                header.setTextViewText(R.id.name, "NO CATEGORY  ${loose.size}")
                 header.setTextColor(R.id.name, SUB)
                 header.setOnClickFillInIntent(R.id.name, open)
                 b.addItem(-2_000_000L, header)
