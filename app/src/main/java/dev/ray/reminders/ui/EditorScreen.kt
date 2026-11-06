@@ -99,6 +99,7 @@ import dev.ray.reminders.alarm.ReminderEngine
 import dev.ray.reminders.data.AlertStyle
 import dev.ray.reminders.data.Behavior
 import dev.ray.reminders.data.ImageStyle
+import dev.ray.reminders.data.Kind
 import dev.ray.reminders.data.Images
 import dev.ray.reminders.data.Reminder
 import dev.ray.reminders.data.ReminderStore
@@ -124,13 +125,13 @@ private fun migrateSilent(r: Reminder): Reminder =
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
+fun EditorScreen(existing: Reminder?, kind: Kind, newId: () -> Int, onClose: () -> Unit) {
     val ctx = LocalContext.current
     var r by rememberSaveable(stateSaver = ReminderSaver) {
         mutableStateOf(
             existing?.let(::migrateSilent) ?: LocalDate.now().let { today ->
                 Reminder(
-                    id = newId(), title = "", repeat = RepeatType.DAILY,
+                    id = newId(), kind = kind, title = "", repeat = if (kind == Kind.ALARM) RepeatType.ONCE else RepeatType.DAILY,
                     startEpochDay = today.toEpochDay(), hour = 9, minute = 0,
                     weekdays = setOf(today.dayOfWeek.value),
                 )
@@ -143,7 +144,10 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
 
     fun behavior(change: Behavior.() -> Behavior) { r = r.copy(behavior = r.behavior.change()) }
     fun save(): Reminder {
-        var cleaned = r.copy(title = r.title.trim().ifEmpty { "Reminder" }, notes = r.notes.trim())
+        var cleaned = r.copy(
+            title = r.title.trim().ifEmpty { if (r.kind == Kind.ALARM) "Alarm" else "Reminder" }, notes = r.notes.trim(),
+        )
+        cleaned = rollAlarm(cleaned)
         // Weekly and daily have no date picker: make sure they start no later than today.
         if (cleaned.repeat == RepeatType.WEEKLY || cleaned.repeat == RepeatType.DAILY) {
             cleaned = cleaned.copy(startEpochDay = minOf(cleaned.startEpochDay, LocalDate.now().toEpochDay()))
@@ -161,11 +165,15 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Nota.Text) }
             Text(
-                if (existing == null) "New reminder" else "Edit", modifier = Modifier.weight(1f),
+                when {
+                    existing != null -> "Edit"
+                    r.kind == Kind.ALARM -> "New alarm"
+                    else -> "New reminder"
+                }, modifier = Modifier.weight(1f),
                 fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, color = Nota.Text,
             )
             // Pin: save and put it in the notification bar right now.
-            if (r.behavior.notification) {
+            if (r.kind == Kind.REMINDER && r.behavior.notification) {
                 Row(
                     Modifier.padding(end = 4.dp).clip(RoundedCornerShape(12.dp)).background(Nota.Raised)
                         .clickable { val saved = save(); ReminderEngine.testNow(ctx, saved.id); onClose() }
@@ -183,8 +191,12 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
             }
         }
 
-        NotaField(r.title, { r = r.copy(title = it) }, "Title", singleLine = true)
-        NotaField(r.notes, { r = r.copy(notes = it) }, "Notes")
+        if (r.kind == Kind.ALARM) {
+            NotaField(r.title.takeIf { it != "Alarm" } ?: "", { r = r.copy(title = it) }, "Label", singleLine = true)
+        } else {
+            NotaField(r.title, { r = r.copy(title = it) }, "Title", singleLine = true)
+            NotaField(r.notes, { r = r.copy(notes = it) }, "Notes")
+        }
 
         // ---------------------------------------------------------------- schedule
         SectionLabel("REPEAT")
@@ -235,8 +247,13 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
         }
 
         // ---------------------------------------------------------------- behaviour
-        SectionLabel("HOW TO REMIND ME")
-        DeliverySection(r, onChange = { r = it })
+        if (r.kind == Kind.ALARM) {
+            SectionLabel("ALARM")
+            AlarmOnlySettings(r, onChange = { r = it })
+        } else {
+            SectionLabel("HOW TO REMIND ME")
+            DeliverySection(r, onChange = { r = it })
+        }
 
         Summary(r)
 
@@ -287,7 +304,7 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
 /** Two short lines: when it repeats, and when it will first go off. */
 @Composable
 private fun Summary(r: Reminder) {
-    val first = remember(r) { ReminderEngine.nextOccurrence(r, System.currentTimeMillis()) }
+    val first = remember(r) { ReminderEngine.nextOccurrence(rollAlarm(r), System.currentTimeMillis()) }
     Row(
         Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(18.dp)).background(Nota.Shelf).padding(16.dp),
         verticalAlignment = Alignment.Top,
@@ -613,34 +630,7 @@ private fun NotificationSettings(r: Reminder, onChange: (Reminder) -> Unit) {
 private fun AlarmSettings(r: Reminder, onChange: (Reminder) -> Unit) {
     val b = r.behavior
     fun update(nb: Behavior) = onChange(r.copy(behavior = nb))
-    var menu by remember { mutableStateOf(false) }
-    // Sound type: no title, just the choice and a green arrow. Opening it extends the same
-    // grey box downward to reveal the other options, rather than a separate popup.
-    val arrow by animateFloatAsState(if (menu) 180f else 0f, label = "arrow")
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nota.Raised).animateContentSize()) {
-        Row(
-            Modifier.fillMaxWidth().clickable { menu = !menu }.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(b.alertStyle.label, style = MaterialTheme.typography.bodyLarge, color = Nota.Text, modifier = Modifier.weight(1f))
-            Icon(
-                Icons.Default.KeyboardArrowDown, contentDescription = "Choose sound", tint = Nota.Mint,
-                modifier = Modifier.size(28.dp).graphicsLayer { rotationZ = arrow },
-            )
-        }
-        if (menu) {
-            listOf(AlertStyle.SOUND_AND_VIBRATE, AlertStyle.SOUND_ONLY, AlertStyle.VIBRATE_ONLY)
-                .filter { it != b.alertStyle }
-                .forEach { style ->
-                    HorizontalDivider(color = Nota.Outline.copy(alpha = 0.5f), modifier = Modifier.padding(horizontal = 16.dp))
-                    Text(
-                        style.label, style = MaterialTheme.typography.bodyLarge, color = Nota.Sub,
-                        modifier = Modifier.fillMaxWidth().clickable { update(b.copy(alertStyle = style)); menu = false }
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                    )
-                }
-        }
-    }
+    SoundPicker(b.alertStyle) { update(b.copy(alertStyle = it)) }
     Stepper("Snooze", Describe.minutes(b.alarmSnoozeMinutes),
         onMinus = { update(b.copy(alarmSnoozeMinutes = stepMinutes(b.alarmSnoozeMinutes, -1, min = 1))) },
         onPlus = { update(b.copy(alarmSnoozeMinutes = stepMinutes(b.alarmSnoozeMinutes, +1, min = 1))) })
@@ -679,3 +669,62 @@ private fun AlarmSettings(r: Reminder, onChange: (Reminder) -> Unit) {
         onPlus = { update(b.copy(fullScreenAfterMinutes = stepMinutes(b.fullScreenAfterMinutes, +1, min = 1))) },
     )
 }
+
+@Composable
+private fun SoundPicker(current: AlertStyle, onPick: (AlertStyle) -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    // Sound type: no title, just the choice and a green arrow. Opening it extends the same
+    // grey box downward to reveal the other options, rather than a separate popup.
+    val arrow by animateFloatAsState(if (menu) 180f else 0f, label = "arrow")
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nota.Raised).animateContentSize()) {
+        Row(
+            Modifier.fillMaxWidth().clickable { menu = !menu }.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(current.label, style = MaterialTheme.typography.bodyLarge, color = Nota.Text, modifier = Modifier.weight(1f))
+            Icon(
+                Icons.Default.KeyboardArrowDown, contentDescription = "Choose sound", tint = Nota.Mint,
+                modifier = Modifier.size(28.dp).graphicsLayer { rotationZ = arrow },
+            )
+        }
+        if (menu) {
+            listOf(AlertStyle.SOUND_AND_VIBRATE, AlertStyle.SOUND_ONLY, AlertStyle.VIBRATE_ONLY)
+                .filter { it != current }
+                .forEach { style ->
+                    HorizontalDivider(color = Nota.Outline.copy(alpha = 0.5f), modifier = Modifier.padding(horizontal = 16.dp))
+                    Text(
+                        style.label, style = MaterialTheme.typography.bodyLarge, color = Nota.Sub,
+                        modifier = Modifier.fillMaxWidth().clickable { onPick(style); menu = false }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                    )
+                }
+        }
+    }
+}
+
+/** Settings for an alarm (Alarms tab): sound, snooze, and an optional heads-up before it rings. */
+@Composable
+private fun AlarmOnlySettings(r: Reminder, onChange: (Reminder) -> Unit) {
+    val b = r.behavior
+    fun update(nb: Behavior) = onChange(r.copy(behavior = nb))
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Nota.Shelf).padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SoundPicker(if (b.alertStyle == AlertStyle.SILENT) AlertStyle.SOUND_AND_VIBRATE else b.alertStyle) {
+            update(b.copy(alertStyle = it))
+        }
+        Stepper("Snooze", Describe.minutes(b.alarmSnoozeMinutes),
+            onMinus = { update(b.copy(alarmSnoozeMinutes = stepMinutes(b.alarmSnoozeMinutes, -1, min = 1))) },
+            onPlus = { update(b.copy(alarmSnoozeMinutes = stepMinutes(b.alarmSnoozeMinutes, +1, min = 1))) })
+        ToggleRow(
+            "Notify before it rings", b.preAlert,
+            subtitle = "A quiet notification ahead of time, with an option to skip",
+        ) { update(b.copy(preAlert = it)) }
+        Stepper("Before", Describe.minutes(b.preAlertMinutes), indent = true, enabled = b.preAlert,
+            onMinus = { update(b.copy(preAlertMinutes = stepMinutes(b.preAlertMinutes, -1, min = 1))) },
+            onPlus = { update(b.copy(preAlertMinutes = stepMinutes(b.preAlertMinutes, +1, min = 1))) })
+    }
+}
+
+private fun rollAlarm(r: Reminder): Reminder = ReminderEngine.rollOnceAlarm(r)

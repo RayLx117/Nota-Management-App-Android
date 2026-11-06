@@ -14,6 +14,7 @@ class ReminderReceiver : BroadcastReceiver() {
             ReminderEngine.ACTION_DONE -> ReminderEngine.done(context, id)
             ReminderEngine.ACTION_SNOOZE -> ReminderEngine.snooze(context, id)
             ReminderEngine.ACTION_SWIPED -> ReminderEngine.swiped(context, id)
+            ReminderEngine.ACTION_SKIP -> ReminderEngine.skipNext(context, id)
             else -> ReminderEngine.onAlarm(context, action, id)
         }
     }

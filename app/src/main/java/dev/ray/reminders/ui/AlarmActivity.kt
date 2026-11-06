@@ -61,7 +61,7 @@ class AlarmActivity : ComponentActivity() {
         if (reminder == null || !reminder.isActive) {
             finish(); return
         }
-        startAlarm(if (reminder.behavior.alarmOn) reminder.behavior.alertStyle else AlertStyle.SILENT)
+        startAlarm(if (reminder.fx.alarmOn) reminder.fx.alertStyle else AlertStyle.SILENT)
 
         setContent {
             RemindersTheme {
@@ -99,7 +99,7 @@ class AlarmActivity : ComponentActivity() {
                         PrimaryButton("Done", onClick = { ReminderEngine.done(this@AlarmActivity, id) }, modifier = Modifier.fillMaxWidth(), height = 64.dp)
                         Spacer(Modifier.height(12.dp))
                         SoftButton(
-                            "Snooze ${Describe.minutes(r.behavior.alarmSnoozeMinutes)}",
+                            "Snooze ${Describe.minutes(r.fx.alarmSnoozeMinutes)}",
                             onClick = { ReminderEngine.snooze(this@AlarmActivity, id, fromAlarm = true) }, modifier = Modifier.fillMaxWidth(), height = 56.dp,
                         )
                     }

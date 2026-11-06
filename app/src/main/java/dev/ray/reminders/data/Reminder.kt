@@ -5,6 +5,10 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class RepeatType { ONCE, DAILY, WEEKLY, MONTHLY, YEARLY }
 
+/** Reminders live in the Reminders tab (notification-first); alarms in the Alarms tab. */
+@Serializable
+enum class Kind { REMINDER, ALARM }
+
 /** How the reminder's picture appears in the notification. */
 @Serializable
 enum class ImageStyle { PICTURE, BANNER }
@@ -40,6 +44,9 @@ data class Behavior(
     val snoozeMinutes: Int = 10,
     /** Length of Snooze on the full-screen alarm. */
     val alarmSnoozeMinutes: Int = 10,
+    /** Alarms only: a quiet heads-up notification [preAlertMinutes] before the alarm rings. */
+    val preAlert: Boolean = false,
+    val preAlertMinutes: Int = 10,
 ) {
     /** Alarm box is on (old "Silent" reminders count as alarm off). */
     val alarmOn: Boolean get() = alarm && alertStyle != AlertStyle.SILENT
@@ -59,6 +66,7 @@ data class Behavior(
 @Serializable
 data class Reminder(
     val id: Int,
+    val kind: Kind = Kind.REMINDER,
     val title: String,
     val notes: String = "",
     val repeat: RepeatType = RepeatType.DAILY,
@@ -87,4 +95,14 @@ data class Reminder(
     val snoozedUntil: Long? = null,
 ) {
     val isActive: Boolean get() = activeSince != null
+
+    /**
+     * The behaviour that actually applies. Alarms always ring full-screen straight away and
+     * have no notification of their own (apart from the optional heads-up before they ring).
+     */
+    val fx: Behavior
+        get() = if (kind == Kind.REMINDER) behavior else behavior.copy(
+            notification = false, alarm = true, fullScreenDelay = false,
+            alertStyle = if (behavior.alertStyle == AlertStyle.SILENT) AlertStyle.SOUND_AND_VIBRATE else behavior.alertStyle,
+        )
 }

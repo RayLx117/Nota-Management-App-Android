@@ -71,7 +71,7 @@ fun ListScreen(reminders: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Un
             item { Shelf(pinned, onEdit) }
             item {
                 Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    PermissionCards(needsFullScreen = reminders.any { it.enabled && it.behavior.effectiveFullScreen })
+                    PermissionCards(needsFullScreen = reminders.any { it.enabled && it.fx.effectiveFullScreen })
                 }
             }
             item {
@@ -92,14 +92,14 @@ fun ListScreen(reminders: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Un
         }
         AddButton(
             onClick = onAdd,
-            modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(20.dp),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
         )
     }
 }
 
-/** Round mint-to-cyan "+" button for a new reminder. */
+/** Round mint-to-cyan "+" button for a new reminder or alarm. */
 @Composable
-private fun AddButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun AddButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier.size(62.dp)
             .shadow(14.dp, CircleShape, ambientColor = Nota.Cyan, spotColor = Nota.Cyan)

@@ -71,11 +71,11 @@ object Notifier {
     fun show(ctx: Context, r: Reminder, alert: Boolean, fullScreen: Boolean = false) {
         ensureChannels(ctx)
         val nm = ctx.getSystemService(NotificationManager::class.java)
-        val style = r.behavior.alertStyle
+        val style = r.fx.alertStyle
         val channel = when {
             fullScreen && alert -> CH_ALARM
             !alert -> CH_QUIET
-            !r.behavior.alarmOn -> if (r.behavior.notificationSilent) CH_QUIET else CH_NOTIFY
+            !r.fx.alarmOn -> if (r.fx.notificationSilent) CH_QUIET else CH_NOTIFY
             style == AlertStyle.VIBRATE_ONLY -> CH_VIBRATE
             style == AlertStyle.SOUND_ONLY -> CH_SOUND_ONLY
             else -> CH_SOUND
@@ -91,7 +91,7 @@ object Notifier {
             ReminderEngine.actionIntent(ctx, ReminderEngine.ACTION_DONE, r.id),
         ).build()
         val snooze = Notification.Action.Builder(
-            Icon.createWithResource(ctx, R.drawable.ic_snooze), "Snooze ${r.behavior.snoozeMinutes} min",
+            Icon.createWithResource(ctx, R.drawable.ic_snooze), "Snooze ${r.fx.snoozeMinutes} min",
             ReminderEngine.actionIntent(ctx, ReminderEngine.ACTION_SNOOZE, r.id),
         ).build()
 
@@ -103,7 +103,7 @@ object Notifier {
             .setCategory(if (fullScreen) Notification.CATEGORY_ALARM else Notification.CATEGORY_REMINDER)
             .setWhen(r.activeSince ?: System.currentTimeMillis())
             .setShowWhen(true)
-            .setOngoing(r.behavior.effectiveSticky)
+            .setOngoing(r.fx.effectiveSticky)
             .setAutoCancel(false)
             .setOnlyAlertOnce(!alert)
             // Android bundles several ungrouped notifications from one app behind a dropdown.
@@ -117,7 +117,7 @@ object Notifier {
             .addAction(snooze)
 
         // Pictures belong to the Notification box.
-        val picture = if (r.behavior.notification) r.imagePath?.let(Images::load) else null
+        val picture = if (r.fx.notification) r.imagePath?.let(Images::load) else null
         if (picture != null && r.imageStyle == ImageStyle.BANNER) {
             // A picture strip across the notification, with the title on top of it.
             val strip = Images.banner(picture)
@@ -156,6 +156,39 @@ object Notifier {
         }
         if (alert) nm.cancel(r.id) // a fresh post re-alerts reliably and moves it to the top
         nm.notify(r.id, builder.build())
+    }
+
+    private const val UPCOMING_OFFSET = 1_000_000
+
+    /** Quiet "Alarm at 7:00 AM" heads-up shown before an alarm rings, with a Skip button. */
+    fun showUpcoming(ctx: Context, r: Reminder) {
+        val at = r.nextTriggerAt ?: return
+        ensureChannels(ctx)
+        val time = java.time.Instant.ofEpochMilli(at).atZone(java.time.ZoneId.systemDefault()).toLocalTime()
+            .format(java.time.format.DateTimeFormatter.ofLocalizedTime(java.time.format.FormatStyle.SHORT))
+        val skip = Notification.Action.Builder(
+            Icon.createWithResource(ctx, R.drawable.ic_check), "Skip this alarm",
+            ReminderEngine.actionIntent(ctx, ReminderEngine.ACTION_SKIP, r.id),
+        ).build()
+        val openApp = PendingIntent.getActivity(
+            ctx, r.id, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val n = Notification.Builder(ctx, CH_QUIET)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Alarm at $time")
+            .setContentText(r.title)
+            .setCategory(Notification.CATEGORY_REMINDER)
+            .setShowWhen(false)
+            .setGroup("upcoming-${r.id}")
+            .setContentIntent(openApp)
+            .addAction(skip)
+            .build()
+        ctx.getSystemService(NotificationManager::class.java).notify(UPCOMING_OFFSET + r.id, n)
+    }
+
+    fun cancelUpcoming(ctx: Context, id: Int) {
+        ctx.getSystemService(NotificationManager::class.java).cancel(UPCOMING_OFFSET + id)
     }
 
     fun cancel(ctx: Context, id: Int) {

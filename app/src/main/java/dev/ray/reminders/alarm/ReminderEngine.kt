@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import dev.ray.reminders.data.Images
+import dev.ray.reminders.data.Kind
+import dev.ray.reminders.data.RepeatType
 import dev.ray.reminders.data.Recurrence
 import dev.ray.reminders.data.Reminder
 import dev.ray.reminders.data.ReminderStore
@@ -32,6 +34,8 @@ object ReminderEngine {
     const val ACTION_DONE = "dev.ray.reminders.action.DONE"
     const val ACTION_SNOOZE = "dev.ray.reminders.action.SNOOZE"
     const val ACTION_SWIPED = "dev.ray.reminders.action.SWIPED"
+    const val ACTION_PREALERT = "dev.ray.reminders.action.PREALERT"
+    const val ACTION_SKIP = "dev.ray.reminders.action.SKIP"
     const val EXTRA_ID = "id"
 
     private const val MINUTE = 60_000L
@@ -45,8 +49,22 @@ object ReminderEngine {
 
     // ---------------------------------------------------------------- user actions
 
+    /**
+     * A one-time alarm set for a time that has already passed rings at that time today, or
+     * tomorrow if today's has gone too (like a clock app).
+     */
+    fun rollOnceAlarm(r: Reminder): Reminder {
+        if (r.kind != Kind.ALARM || r.repeat != RepeatType.ONCE) return r
+        val now = now()
+        if (nextOccurrence(r, now) != null) return r
+        val today = java.time.LocalDate.now().toEpochDay()
+        return listOf(today, today + 1).map { r.copy(startEpochDay = it) }
+            .firstOrNull { nextOccurrence(it, now) != null } ?: r
+    }
+
     /** Create or update a reminder from the editor. */
-    fun save(ctx: Context, edited: Reminder) {
+    fun save(ctx: Context, input: Reminder) {
+        val edited = if (input.enabled) rollOnceAlarm(input) else input
         store(ctx).get(edited.id)?.imagePath?.let { old -> if (old != edited.imagePath) Images.delete(old) }
         val next = if (edited.enabled) nextOccurrence(edited, now()) else null
         var r = edited.copy(nextTriggerAt = next)
@@ -68,7 +86,8 @@ object ReminderEngine {
     }
 
     fun delete(ctx: Context, id: Int) {
-        listOf(ACTION_FIRE, ACTION_NAG, ACTION_FULLSCREEN, ACTION_SNOOZE_END).forEach { cancel(ctx, it, id) }
+        listOf(ACTION_FIRE, ACTION_NAG, ACTION_FULLSCREEN, ACTION_SNOOZE_END, ACTION_PREALERT).forEach { cancel(ctx, it, id) }
+        Notifier.cancelUpcoming(ctx, id)
         Notifier.cancel(ctx, id)
         store(ctx).get(id)?.imagePath?.let(Images::delete)
         store(ctx).delete(id)
@@ -86,18 +105,28 @@ object ReminderEngine {
 
     fun snooze(ctx: Context, id: Int, fromAlarm: Boolean = false) {
         val r = store(ctx).get(id) ?: return
-        val minutes = if (fromAlarm) r.behavior.alarmSnoozeMinutes else r.behavior.snoozeMinutes
+        val minutes = if (fromAlarm) r.fx.alarmSnoozeMinutes else r.fx.snoozeMinutes
         val until = now() + minutes.coerceAtLeast(1) * MINUTE
         store(ctx).modify(id) { it.copy(activeSince = null, fullScreenShownAt = null, snoozedUntil = until) }
         clearActive(ctx, id)
         setAlarm(ctx, ACTION_SNOOZE_END, id, until)
     }
 
+    /** Alarm heads-up "Skip": drop the upcoming occurrence and move on to the one after. */
+    fun skipNext(ctx: Context, id: Int) {
+        val r = store(ctx).get(id) ?: return
+        val skipped = r.nextTriggerAt ?: return
+        val next = nextOccurrence(r, skipped)
+        val updated = store(ctx).modify(id) { it.copy(nextTriggerAt = next) } ?: return
+        Notifier.cancelUpcoming(ctx, id)
+        armFire(ctx, updated)
+    }
+
     /** The notification was swiped away (or cleared). Sticky reminders come straight back. */
     fun swiped(ctx: Context, id: Int) {
         val r = store(ctx).get(id) ?: return
         if (!r.isActive) return
-        if (r.behavior.effectiveSticky) Notifier.show(ctx, r, alert = false) else done(ctx, id)
+        if (r.fx.effectiveSticky) Notifier.show(ctx, r, alert = false) else done(ctx, id)
     }
 
     // ---------------------------------------------------------------- alarm callbacks
@@ -105,21 +134,26 @@ object ReminderEngine {
     fun onAlarm(ctx: Context, action: String, id: Int) {
         val r = store(ctx).get(id) ?: return
         when (action) {
+            ACTION_PREALERT -> if (r.enabled && r.nextTriggerAt != null) Notifier.showUpcoming(ctx, r)
             ACTION_FIRE -> {
                 if (!r.enabled) return
+                Notifier.cancelUpcoming(ctx, id)
                 // Schedule the following occurrence first, so a reminder left un-done
                 // never blocks the next one.
                 val next = nextOccurrence(r, maxOf(now(), r.nextTriggerAt ?: 0L))
-                val updated = store(ctx).modify(id) { it.copy(nextTriggerAt = next) } ?: return
+                // A one-time alarm switches itself off once it has rung.
+                val updated = store(ctx).modify(id) {
+                    it.copy(nextTriggerAt = next, enabled = it.enabled && !(it.kind == Kind.ALARM && next == null))
+                } ?: return
                 armFire(ctx, updated)
                 activate(ctx, id)
             }
             ACTION_SNOOZE_END -> if (r.snoozedUntil != null) activate(ctx, id)
-            ACTION_NAG -> if (r.isActive && r.behavior.effectiveNag) {
+            ACTION_NAG -> if (r.isActive && r.fx.effectiveNag) {
                 Notifier.show(ctx, r, alert = true, fullScreen = r.fullScreenShownAt != null)
                 setAlarm(ctx, ACTION_NAG, id, now() + nagInterval(r))
             }
-            ACTION_FULLSCREEN -> if (r.isActive && r.behavior.effectiveFullScreen) {
+            ACTION_FULLSCREEN -> if (r.isActive && r.fx.effectiveFullScreen) {
                 val shown = store(ctx).modify(id) { it.copy(fullScreenShownAt = now()) } ?: return
                 Notifier.show(ctx, shown, alert = true, fullScreen = true)
             }
@@ -155,6 +189,13 @@ object ReminderEngine {
         val r = store(ctx).modify(id) {
             it.copy(activeSince = now(), fullScreenShownAt = null, snoozedUntil = null)
         } ?: return
+        // No delay (and always for alarms): go straight to the full-screen alarm.
+        if (r.fx.effectiveFullScreen && r.fx.fullScreenDelayMinutes == 0) {
+            val shown = store(ctx).modify(id) { it.copy(fullScreenShownAt = now()) } ?: return
+            Notifier.show(ctx, shown, alert = true, fullScreen = true)
+            armActive(ctx, shown)
+            return
+        }
         Notifier.show(ctx, r, alert = true)
         armActive(ctx, r)
     }
@@ -164,9 +205,9 @@ object ReminderEngine {
         cancel(ctx, ACTION_NAG, r.id)
         cancel(ctx, ACTION_FULLSCREEN, r.id)
         val since = r.activeSince ?: return
-        if (r.behavior.effectiveNag) setAlarm(ctx, ACTION_NAG, r.id, now() + nagInterval(r))
-        if (r.behavior.effectiveFullScreen && r.fullScreenShownAt == null) {
-            val at = since + r.behavior.fullScreenDelayMinutes * MINUTE
+        if (r.fx.effectiveNag) setAlarm(ctx, ACTION_NAG, r.id, now() + nagInterval(r))
+        if (r.fx.effectiveFullScreen && r.fullScreenShownAt == null) {
+            val at = since + r.fx.fullScreenDelayMinutes * MINUTE
             setAlarm(ctx, ACTION_FULLSCREEN, r.id, maxOf(at, now() + 1_000))
         }
     }
@@ -180,9 +221,17 @@ object ReminderEngine {
     private fun armFire(ctx: Context, r: Reminder) {
         val at = r.nextTriggerAt
         if (r.enabled && at != null) setAlarm(ctx, ACTION_FIRE, r.id, at) else cancel(ctx, ACTION_FIRE, r.id)
+        // Alarms can post a heads-up a little before they ring.
+        val pre = at?.minus(r.behavior.preAlertMinutes.coerceAtLeast(1) * MINUTE)
+        if (r.enabled && r.kind == Kind.ALARM && r.behavior.preAlert && at != null && pre != null && at > now()) {
+            if (pre > now()) setAlarm(ctx, ACTION_PREALERT, r.id, pre) else Notifier.showUpcoming(ctx, r)
+        } else {
+            cancel(ctx, ACTION_PREALERT, r.id)
+            Notifier.cancelUpcoming(ctx, r.id)
+        }
     }
 
-    private fun nagInterval(r: Reminder) = r.behavior.nagEveryMinutes.coerceAtLeast(1) * MINUTE
+    private fun nagInterval(r: Reminder) = r.fx.nagEveryMinutes.coerceAtLeast(1) * MINUTE
 
     private fun pending(ctx: Context, action: String, id: Int): PendingIntent {
         val intent = Intent(ctx, ReminderReceiver::class.java)

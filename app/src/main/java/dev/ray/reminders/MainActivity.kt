@@ -2,6 +2,36 @@ package dev.ray.reminders
 
 import android.graphics.Color
 import android.os.Bundle
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import dev.ray.reminders.data.Kind
+import dev.ray.reminders.ui.AlarmsScreen
+import dev.ray.reminders.ui.ComingSoonScreen
+import dev.ray.reminders.ui.Dot
+import dev.ray.reminders.ui.Nota
+import kotlinx.coroutines.launch
 import androidx.activity.SystemBarStyle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -33,23 +63,80 @@ class MainActivity : ComponentActivity() {
 
 private const val NEW = -1
 
+private enum class Tab(val label: String, val icon: Int) {
+    TIMER("Timer", R.drawable.ic_tab_timer),
+    ALARMS("Alarms", R.drawable.ic_tab_alarm),
+    REMINDERS("Reminders", R.drawable.ic_tab_reminders),
+    LISTS("Lists", R.drawable.ic_tab_lists),
+}
+
 @Composable
 private fun App() {
     val ctx = LocalContext.current
     val store = remember { ReminderStore.get(ctx) }
     val items by store.items.collectAsState()
-    // null = list, NEW = new reminder, otherwise the id being edited
-    var editing by rememberSaveable { mutableStateOf<Int?>(null) }
+    // What's open in the editor: null = nothing, otherwise (kind, id or NEW).
+    var editingId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var editingKind by rememberSaveable { mutableStateOf(Kind.REMINDER) }
+    val pager = rememberPagerState(initialPage = Tab.REMINDERS.ordinal) { Tab.entries.size }
+    val scope = rememberCoroutineScope()
 
-    val current = editing
-    if (current == null) {
-        ListScreen(items, onAdd = { editing = NEW }, onEdit = { editing = it })
-    } else {
-        BackHandler { editing = null }
+    val current = editingId
+    if (current != null) {
+        BackHandler { editingId = null }
         EditorScreen(
             existing = items.firstOrNull { it.id == current },
+            kind = editingKind,
             newId = { store.newId() },
-            onClose = { editing = null },
+            onClose = { editingId = null },
         )
+        return
+    }
+
+    fun edit(kind: Kind, id: Int) { editingKind = kind; editingId = id }
+
+    Column(Modifier.fillMaxSize().background(Nota.Bg)) {
+        HorizontalPager(pager, modifier = Modifier.weight(1f), beyondViewportPageCount = 1) { page ->
+            when (Tab.entries[page]) {
+                Tab.TIMER -> ComingSoonScreen("Timer", "Countdown timers will live here.")
+                Tab.ALARMS -> AlarmsScreen(
+                    items.filter { it.kind == Kind.ALARM },
+                    onAdd = { edit(Kind.ALARM, NEW) }, onEdit = { edit(Kind.ALARM, it) },
+                )
+                Tab.REMINDERS -> ListScreen(
+                    items.filter { it.kind == Kind.REMINDER },
+                    onAdd = { edit(Kind.REMINDER, NEW) }, onEdit = { edit(Kind.REMINDER, it) },
+                )
+                Tab.LISTS -> ComingSoonScreen("Lists", "Checklists will live here.")
+            }
+        }
+        // Bottom bar: tap to jump, or swipe between screens.
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).background(Nota.Shelf)
+                .navigationBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
+        ) {
+            Tab.entries.forEach { tab ->
+                val selected = pager.currentPage == tab.ordinal
+                Column(
+                    Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
+                        .clickable { scope.launch { pager.animateScrollToPage(tab.ordinal) } }
+                        .padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box {
+                        Icon(
+                            painterResource(tab.icon), contentDescription = null, modifier = Modifier.size(24.dp),
+                            tint = if (selected) Nota.Text else Nota.Sub,
+                        )
+                        if (selected) Dot(size = 8.dp, modifier = Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-2).dp))
+                    }
+                    Text(
+                        tab.label, fontFamily = Nota.Outfit, fontSize = 12.sp,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (selected) Nota.Text else Nota.Sub, modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+        }
     }
 }
