@@ -1,0 +1,119 @@
+package dev.ray.reminders.alarm
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.graphics.drawable.Icon
+import android.media.AudioAttributes
+import android.media.RingtoneManager
+import dev.ray.reminders.MainActivity
+import dev.ray.reminders.R
+import dev.ray.reminders.data.AlertStyle
+import dev.ray.reminders.data.Reminder
+import dev.ray.reminders.ui.AlarmActivity
+
+object Notifier {
+
+    // Channel settings can't be changed by the app after creation, so each alert style has its own.
+    private const val CH_SOUND = "alert_sound"
+    private const val CH_VIBRATE = "alert_vibrate"
+    private const val CH_QUIET = "quiet"
+    private const val CH_ALARM = "alarm"
+
+    private val VIBRATION = longArrayOf(0, 400, 250, 400, 250, 400)
+
+    fun ensureChannels(ctx: Context) {
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannels(
+            listOf(
+                NotificationChannel(CH_SOUND, "Reminders: sound + vibration", NotificationManager.IMPORTANCE_HIGH).apply {
+                    enableVibration(true)
+                    vibrationPattern = VIBRATION
+                },
+                NotificationChannel(CH_VIBRATE, "Reminders: vibration only", NotificationManager.IMPORTANCE_HIGH).apply {
+                    setSound(null, null)
+                    enableVibration(true)
+                    vibrationPattern = VIBRATION
+                },
+                NotificationChannel(CH_QUIET, "Reminders: silent", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "Silent reminders, and sticky reminders brought back after a swipe"
+                },
+                NotificationChannel(CH_ALARM, "Full-screen alarms", NotificationManager.IMPORTANCE_HIGH).apply {
+                    setSound(
+                        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
+                        AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build(),
+                    )
+                    enableVibration(true)
+                    vibrationPattern = VIBRATION
+                },
+            ),
+        )
+    }
+
+    /**
+     * Posts (or re-posts) the notification for an active reminder.
+     * @param alert make noise/vibrate according to the reminder's alert style; false = update quietly.
+     * @param fullScreen attach a full-screen intent that opens the alarm screen.
+     */
+    fun show(ctx: Context, r: Reminder, alert: Boolean, fullScreen: Boolean = false) {
+        ensureChannels(ctx)
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        val style = r.behavior.alertStyle
+        val channel = when {
+            fullScreen && alert -> CH_ALARM
+            !alert || style == AlertStyle.SILENT -> CH_QUIET
+            style == AlertStyle.VIBRATE_ONLY -> CH_VIBRATE
+            else -> CH_SOUND
+        }
+
+        val openApp = PendingIntent.getActivity(
+            ctx, r.id,
+            Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val done = Notification.Action.Builder(
+            Icon.createWithResource(ctx, R.drawable.ic_check), "Done",
+            ReminderEngine.actionIntent(ctx, ReminderEngine.ACTION_DONE, r.id),
+        ).build()
+        val snooze = Notification.Action.Builder(
+            Icon.createWithResource(ctx, R.drawable.ic_snooze), "Snooze ${r.behavior.snoozeMinutes} min",
+            ReminderEngine.actionIntent(ctx, ReminderEngine.ACTION_SNOOZE, r.id),
+        ).build()
+
+        val text = r.notes.ifBlank { if (r.behavior.sticky) "Tap Done when you've taken care of it" else "" }
+        val builder = Notification.Builder(ctx, channel)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(r.title)
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setCategory(if (fullScreen) Notification.CATEGORY_ALARM else Notification.CATEGORY_REMINDER)
+            .setWhen(r.activeSince ?: System.currentTimeMillis())
+            .setShowWhen(true)
+            .setOngoing(r.behavior.sticky)
+            .setAutoCancel(false)
+            .setOnlyAlertOnce(!alert)
+            .setContentIntent(openApp)
+            // Android 14+ lets people swipe away even "ongoing" notifications while unlocked.
+            // We get told when that happens and put sticky reminders straight back.
+            .setDeleteIntent(ReminderEngine.actionIntent(ctx, ReminderEngine.ACTION_SWIPED, r.id))
+            .addAction(done)
+            .addAction(snooze)
+
+        if (fullScreen) {
+            val alarm = PendingIntent.getActivity(
+                ctx, r.id, AlarmActivity.intent(ctx, r.id),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            builder.setFullScreenIntent(alarm, true)
+        }
+        if (alert) nm.cancel(r.id) // a fresh post re-alerts reliably and moves it to the top
+        nm.notify(r.id, builder.build())
+    }
+
+    fun cancel(ctx: Context, id: Int) {
+        ctx.getSystemService(NotificationManager::class.java).cancel(id)
+    }
+}
