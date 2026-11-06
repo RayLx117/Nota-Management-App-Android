@@ -106,8 +106,8 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
     fun behavior(change: Behavior.() -> Behavior) { r = r.copy(behavior = r.behavior.change()) }
     fun save(): Reminder {
         var cleaned = r.copy(title = r.title.trim().ifEmpty { "Reminder" }, notes = r.notes.trim())
-        // Weekly has no start date picker: make sure it starts no later than today.
-        if (cleaned.repeat == RepeatType.WEEKLY) {
+        // Weekly and daily have no date picker: make sure they start no later than today.
+        if (cleaned.repeat == RepeatType.WEEKLY || cleaned.repeat == RepeatType.DAILY) {
             cleaned = cleaned.copy(startEpochDay = minOf(cleaned.startEpochDay, LocalDate.now().toEpochDay()))
         }
         ReminderEngine.save(ctx, cleaned)
@@ -155,8 +155,11 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
             }
         }
         // Weekly reminders are anchored by the chosen days, so they don't need a start date.
-        if (r.repeat != RepeatType.WEEKLY) {
-            ValueRow(if (r.repeat == RepeatType.ONCE) "Date" else "Starts", Describe.date(r.startEpochDay)) { showDate = true }
+        // Daily runs from today, so its date row just says so.
+        when (r.repeat) {
+            RepeatType.WEEKLY -> Unit
+            RepeatType.DAILY -> ValueRow("Date", if (r.interval == 1) "Every day" else "Every ${r.interval} days", onClick = null)
+            else -> ValueRow("Date", Describe.date(r.startEpochDay)) { showDate = true }
         }
         ValueRow("Time", Describe.time(r)) { showTime = true }
 
@@ -337,9 +340,10 @@ private fun ToggleRow(
 }
 
 @Composable
-private fun ValueRow(label: String, value: String, onClick: () -> Unit) {
+private fun ValueRow(label: String, value: String, onClick: (() -> Unit)?) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nota.Shelf).clickable(onClick = onClick)
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nota.Shelf)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
