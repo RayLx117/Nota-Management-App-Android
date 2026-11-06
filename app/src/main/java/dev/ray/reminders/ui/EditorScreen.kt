@@ -1,6 +1,21 @@
 package dev.ray.reminders.ui
 
 import android.text.format.DateFormat
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.BiasAlignment
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.delay
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.tween
@@ -92,13 +107,18 @@ private val ReminderSaver = Saver<Reminder, String>(
 
 private const val DAY_MS = 86_400_000L
 
+/** The old "Silent" alert style becomes "Alarm off" now that alarms have their own box. */
+private fun migrateSilent(r: Reminder): Reminder =
+    if (r.behavior.alertStyle != AlertStyle.SILENT) r
+    else r.copy(behavior = r.behavior.copy(alarm = false, alertStyle = AlertStyle.SOUND_AND_VIBRATE))
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
     val ctx = LocalContext.current
     var r by rememberSaveable(stateSaver = ReminderSaver) {
         mutableStateOf(
-            existing ?: LocalDate.now().let { today ->
+            existing?.let(::migrateSilent) ?: LocalDate.now().let { today ->
                 Reminder(
                     id = newId(), title = "", repeat = RepeatType.DAILY,
                     startEpochDay = today.toEpochDay(), hour = 9, minute = 0,
@@ -142,7 +162,6 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
 
         NotaField(r.title, { r = r.copy(title = it) }, "Title", singleLine = true)
         NotaField(r.notes, { r = r.copy(notes = it) }, "Notes")
-        PictureSection(r, onChange = { r = it })
 
         // ---------------------------------------------------------------- schedule
         SectionLabel("REPEAT")
@@ -193,31 +212,8 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
         }
 
         // ---------------------------------------------------------------- behaviour
-        SectionLabel("ALERT")
-        ChipRow {
-            AlertStyle.entries.forEach { style ->
-                DotChip(style.label, r.behavior.alertStyle == style) { behavior { copy(alertStyle = style) } }
-            }
-        }
-        ToggleRow("Pin until Done", r.behavior.sticky) { behavior { copy(sticky = it) } }
-        ToggleRow("Repeat alert", r.behavior.nag) { behavior { copy(nag = it) } }
-        Stepper("Every", Describe.minutes(r.behavior.nagEveryMinutes), indent = true, enabled = r.behavior.nag,
-            onMinus = { behavior { copy(nagEveryMinutes = stepMinutes(nagEveryMinutes, -1, min = 1)) } },
-            onPlus = { behavior { copy(nagEveryMinutes = stepMinutes(nagEveryMinutes, +1, min = 1)) } })
-        ToggleRow("Full-screen alarm", r.behavior.fullScreen) { behavior { copy(fullScreen = it) } }
-        ToggleRow(
-            "Delay alarm", r.behavior.fullScreenDelay, indent = true, enabled = r.behavior.fullScreen,
-            subtitle = "Wait after the notification appears before the alarm takes over",
-        ) { behavior { copy(fullScreenDelay = it) } }
-        Stepper(
-            "Wait", Describe.minutes(r.behavior.fullScreenAfterMinutes.coerceAtLeast(1)), indent = true,
-            enabled = r.behavior.fullScreen && r.behavior.fullScreenDelay,
-            onMinus = { behavior { copy(fullScreenAfterMinutes = stepMinutes(fullScreenAfterMinutes, -1, min = 1)) } },
-            onPlus = { behavior { copy(fullScreenAfterMinutes = stepMinutes(fullScreenAfterMinutes, +1, min = 1)) } },
-        )
-        Stepper("Snooze", Describe.minutes(r.behavior.snoozeMinutes),
-            onMinus = { behavior { copy(snoozeMinutes = stepMinutes(snoozeMinutes, -1, min = 1)) } },
-            onPlus = { behavior { copy(snoozeMinutes = stepMinutes(snoozeMinutes, +1, min = 1)) } })
+        SectionLabel("HOW TO REMIND ME")
+        DeliverySection(r, onChange = { r = it })
 
         Summary(r)
 
@@ -457,7 +453,166 @@ private fun RepeatType.unit(n: Int): String {
 
 private val AlertStyle.label: String
     get() = when (this) {
-        AlertStyle.SOUND_AND_VIBRATE -> "Sound"
-        AlertStyle.VIBRATE_ONLY -> "Vibrate"
+        AlertStyle.SOUND_AND_VIBRATE -> "Sound + vibrate"
+        AlertStyle.VIBRATE_ONLY -> "Vibrate only"
+        AlertStyle.SOUND_ONLY -> "Sound only"
         AlertStyle.SILENT -> "Silent"
     }
+
+// ------------------------------------------------------------------------ Notification / Alarm
+
+private enum class DeliveryTab { NOTIFICATION, ALARM }
+
+/**
+ * Two glowing boxes, Notification and Alarm, each with its own switch. Tapping a box brings it
+ * to the front and shows its settings in the panel underneath. At least one must stay on.
+ */
+@Composable
+private fun DeliverySection(r: Reminder, onChange: (Reminder) -> Unit) {
+    val b = r.behavior
+    var tab by rememberSaveable {
+        mutableStateOf(if (b.notification || !b.alarmOn) DeliveryTab.NOTIFICATION else DeliveryTab.ALARM)
+    }
+    var warn by remember { mutableStateOf(false) }
+    LaunchedEffect(warn) { if (warn) { delay(2500); warn = false } }
+
+    fun update(nb: Behavior) = onChange(r.copy(behavior = nb))
+    fun toggle(t: DeliveryTab, on: Boolean) {
+        val nb = if (t == DeliveryTab.NOTIFICATION) b.copy(notification = on) else b.copy(alarm = on)
+        if (!nb.notification && !nb.alarmOn) { warn = true; return }
+        update(nb)
+        tab = t
+    }
+
+    Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        ModeBox(
+            "Notification", "Sits in your bar", on = b.notification, selected = tab == DeliveryTab.NOTIFICATION,
+            onSelect = { tab = DeliveryTab.NOTIFICATION }, onToggle = { toggle(DeliveryTab.NOTIFICATION, it) },
+            modifier = Modifier.weight(1f),
+        )
+        ModeBox(
+            "Alarm", "Sound & vibration", on = b.alarmOn, selected = tab == DeliveryTab.ALARM,
+            onSelect = { tab = DeliveryTab.ALARM }, onToggle = { toggle(DeliveryTab.ALARM, it) },
+            modifier = Modifier.weight(1f),
+        )
+    }
+    AnimatedVisibility(warn) {
+        Text("Keep at least one on", color = Nota.Error, style = MaterialTheme.typography.bodySmall)
+    }
+
+    // Little pointer that slides under the box whose settings are showing.
+    val bias by animateFloatAsState(if (tab == DeliveryTab.NOTIFICATION) -0.52f else 0.52f, label = "pointer")
+    Column {
+        Box(Modifier.fillMaxWidth().height(12.dp)) {
+            Canvas(Modifier.align(BiasAlignment(bias, 1f)).size(width = 22.dp, height = 12.dp)) {
+                drawPath(
+                    Path().apply { moveTo(size.width / 2, 0f); lineTo(size.width, size.height); lineTo(0f, size.height); close() },
+                    color = Nota.Shelf,
+                )
+            }
+        }
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Nota.Shelf)) {
+            AnimatedContent(
+                targetState = tab,
+                transitionSpec = {
+                    val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                    (slideInHorizontally(tween(260)) { it / 3 * dir } + fadeIn(tween(260)))
+                        .togetherWith(slideOutHorizontally(tween(200)) { -it / 3 * dir } + fadeOut(tween(160)))
+                        .using(SizeTransform(clip = false) { _, _ -> tween(260) })
+                },
+                label = "delivery settings",
+            ) { t ->
+                val on = if (t == DeliveryTab.NOTIFICATION) b.notification else b.alarmOn
+                Box {
+                    Column(
+                        Modifier.fillMaxWidth().alpha(if (on) 1f else 0.35f).padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        if (t == DeliveryTab.NOTIFICATION) NotificationSettings(r, onChange) else AlarmSettings(r, onChange)
+                    }
+                    // While a box is off its settings are greyed out; tapping them switches it on.
+                    if (!on) Box(
+                        Modifier.matchParentSize().clickable(
+                            interactionSource = remember { MutableInteractionSource() }, indication = null,
+                        ) { toggle(t, true) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModeBox(
+    title: String, caption: String, on: Boolean, selected: Boolean,
+    onSelect: () -> Unit, onToggle: (Boolean) -> Unit, modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(20.dp)
+    val border by animateColorAsState(if (on) Nota.Mint else Nota.Raised, label = "border")
+    val glow by animateDpAsState(if (on) 14.dp else 0.dp, label = "glow")
+    val scale by animateFloatAsState(if (selected) 1f else 0.94f, label = "scale")
+    val fade by animateFloatAsState(if (selected) 1f else 0.6f, label = "fade")
+    Column(
+        modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale; alpha = fade }
+            .shadow(glow, shape, ambientColor = Nota.Mint, spotColor = Nota.Mint)
+            .clip(shape)
+            .background(if (selected) Nota.Raised else Nota.Shelf)
+            .border(2.dp, border, shape)
+            .clickable(onClick = onSelect)
+            .padding(start = 14.dp, end = 10.dp, top = 8.dp, bottom = 14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Dot(size = 9.dp, color = if (on) Nota.Mint else Nota.Outline)
+            Spacer(Modifier.weight(1f))
+            Switch(checked = on, onCheckedChange = onToggle, colors = notaSwitchColors())
+        }
+        Text(title, fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = Nota.Text)
+        Text(caption, style = MaterialTheme.typography.bodySmall, color = Nota.Sub)
+    }
+}
+
+@Composable
+private fun NotificationSettings(r: Reminder, onChange: (Reminder) -> Unit) {
+    val b = r.behavior
+    fun update(nb: Behavior) = onChange(r.copy(behavior = nb))
+    ToggleRow("Silent", b.notificationSilent) { update(b.copy(notificationSilent = it)) }
+    ToggleRow("Pin until Done", b.sticky) { update(b.copy(sticky = it)) }
+    Stepper("Snooze", Describe.minutes(b.snoozeMinutes),
+        onMinus = { update(b.copy(snoozeMinutes = stepMinutes(b.snoozeMinutes, -1, min = 1))) },
+        onPlus = { update(b.copy(snoozeMinutes = stepMinutes(b.snoozeMinutes, +1, min = 1))) })
+    PictureSection(r, onChange)
+}
+
+@Composable
+private fun AlarmSettings(r: Reminder, onChange: (Reminder) -> Unit) {
+    val b = r.behavior
+    fun update(nb: Behavior) = onChange(r.copy(behavior = nb))
+    var menu by remember { mutableStateOf(false) }
+    Box {
+        ValueRow("Sound", b.alertStyle.label + "  ▾", onClick = { menu = true })
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = Nota.Shelf) {
+            listOf(AlertStyle.SOUND_AND_VIBRATE, AlertStyle.SOUND_ONLY, AlertStyle.VIBRATE_ONLY).forEach { style ->
+                DropdownMenuItem(
+                    text = { Text(style.label, color = if (style == b.alertStyle) Nota.Mint else Nota.Text) },
+                    onClick = { update(b.copy(alertStyle = style)); menu = false },
+                )
+            }
+        }
+    }
+    ToggleRow("Repeat alert", b.nag) { update(b.copy(nag = it)) }
+    Stepper("Every", Describe.minutes(b.nagEveryMinutes), indent = true, enabled = b.nag,
+        onMinus = { update(b.copy(nagEveryMinutes = stepMinutes(b.nagEveryMinutes, -1, min = 1))) },
+        onPlus = { update(b.copy(nagEveryMinutes = stepMinutes(b.nagEveryMinutes, +1, min = 1))) })
+    ToggleRow("Full-screen alarm", b.fullScreen) { update(b.copy(fullScreen = it)) }
+    ToggleRow(
+        "Delay alarm", b.fullScreenDelay, indent = true, enabled = b.fullScreen,
+        subtitle = "Wait after the notification appears before the alarm takes over",
+    ) { update(b.copy(fullScreenDelay = it)) }
+    Stepper(
+        "Wait", Describe.minutes(b.fullScreenAfterMinutes.coerceAtLeast(1)), indent = true,
+        enabled = b.fullScreen && b.fullScreenDelay,
+        onMinus = { update(b.copy(fullScreenAfterMinutes = stepMinutes(b.fullScreenAfterMinutes, -1, min = 1))) },
+        onPlus = { update(b.copy(fullScreenAfterMinutes = stepMinutes(b.fullScreenAfterMinutes, +1, min = 1))) },
+    )
+}

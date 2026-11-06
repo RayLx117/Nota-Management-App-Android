@@ -24,6 +24,8 @@ object Notifier {
     // Channel settings can't be changed by the app after creation, so each alert style has its own.
     private const val CH_SOUND = "alert_sound"
     private const val CH_VIBRATE = "alert_vibrate"
+    private const val CH_SOUND_ONLY = "alert_sound_only"
+    private const val CH_NOTIFY = "notification_sound"
     private const val CH_QUIET = "quiet"
     private const val CH_ALARM = "alarm"
 
@@ -42,6 +44,10 @@ object Notifier {
                     enableVibration(true)
                     vibrationPattern = VIBRATION
                 },
+                NotificationChannel(CH_SOUND_ONLY, "Reminders: sound only", NotificationManager.IMPORTANCE_HIGH).apply {
+                    enableVibration(false)
+                },
+                NotificationChannel(CH_NOTIFY, "Reminders: notification sound", NotificationManager.IMPORTANCE_DEFAULT),
                 NotificationChannel(CH_QUIET, "Reminders: silent", NotificationManager.IMPORTANCE_LOW).apply {
                     description = "Silent reminders, and sticky reminders brought back after a swipe"
                 },
@@ -68,8 +74,10 @@ object Notifier {
         val style = r.behavior.alertStyle
         val channel = when {
             fullScreen && alert -> CH_ALARM
-            !alert || style == AlertStyle.SILENT -> CH_QUIET
+            !alert -> CH_QUIET
+            !r.behavior.alarmOn -> if (r.behavior.notificationSilent) CH_QUIET else CH_NOTIFY
             style == AlertStyle.VIBRATE_ONLY -> CH_VIBRATE
+            style == AlertStyle.SOUND_ONLY -> CH_SOUND_ONLY
             else -> CH_SOUND
         }
 
@@ -95,7 +103,7 @@ object Notifier {
             .setCategory(if (fullScreen) Notification.CATEGORY_ALARM else Notification.CATEGORY_REMINDER)
             .setWhen(r.activeSince ?: System.currentTimeMillis())
             .setShowWhen(true)
-            .setOngoing(r.behavior.sticky)
+            .setOngoing(r.behavior.effectiveSticky)
             .setAutoCancel(false)
             .setOnlyAlertOnce(!alert)
             // Android bundles several ungrouped notifications from one app behind a dropdown.
@@ -108,7 +116,8 @@ object Notifier {
             .addAction(done)
             .addAction(snooze)
 
-        val picture = r.imagePath?.let(Images::load)
+        // Pictures belong to the Notification box.
+        val picture = if (r.behavior.notification) r.imagePath?.let(Images::load) else null
         if (picture != null && r.imageStyle == ImageStyle.BANNER) {
             // A picture strip across the notification, with the title on top of it.
             val strip = Images.banner(picture)

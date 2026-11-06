@@ -10,11 +10,21 @@ enum class RepeatType { ONCE, DAILY, WEEKLY, MONTHLY, YEARLY }
 enum class ImageStyle { PICTURE, BANNER }
 
 @Serializable
-enum class AlertStyle { SOUND_AND_VIBRATE, VIBRATE_ONLY, SILENT }
+enum class AlertStyle {
+    SOUND_AND_VIBRATE, VIBRATE_ONLY, SOUND_ONLY,
+    /** Old setting from before the Notification/Alarm split; treated as "Alarm off". */
+    SILENT,
+}
 
 /** How a reminder behaves once it goes off. Every option is independent. */
 @Serializable
 data class Behavior(
+    /** "Notification" box: a silent notification in the bar (picture, pin until Done, snooze). */
+    val notification: Boolean = true,
+    /** "Alarm" box: sound and/or vibration, repeat alerts and the full-screen alarm. */
+    val alarm: Boolean = true,
+    /** Notification box: post quietly (true) or with the normal notification sound. */
+    val notificationSilent: Boolean = true,
     /** Keep the notification in the bar until Done is tapped. Swiping it away just brings it back. */
     val sticky: Boolean = true,
     /** How the first alert (and any repeat alerts) get your attention. */
@@ -29,6 +39,14 @@ data class Behavior(
     /** Length of the Snooze button. */
     val snoozeMinutes: Int = 10,
 ) {
+    /** Alarm box is on (old "Silent" reminders count as alarm off). */
+    val alarmOn: Boolean get() = alarm && alertStyle != AlertStyle.SILENT
+
+    // What actually happens, taking the two boxes into account.
+    val effectiveSticky: Boolean get() = notification && sticky
+    val effectiveNag: Boolean get() = alarmOn && nag
+    val effectiveFullScreen: Boolean get() = alarmOn && fullScreen
+
     /** Minutes between the notification appearing and the full-screen alarm. */
     val fullScreenDelayMinutes: Int get() = if (fullScreenDelay) fullScreenAfterMinutes.coerceAtLeast(1) else 0
 }

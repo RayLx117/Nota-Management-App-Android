@@ -147,7 +147,7 @@ fun SoftButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
 fun DotChip(text: String, selected: Boolean, onClick: () -> Unit) {
     Box {
         Box(
-            Modifier.clip(RoundedCornerShape(12.dp)).background(if (selected) Nota.Raised else Nota.Shelf)
+            Modifier.clip(RoundedCornerShape(12.dp)).background(Nota.Raised)
                 .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 9.dp),
         ) {
             Text(

@@ -68,7 +68,7 @@ fun ListScreen(reminders: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Un
             item { Shelf(pinned, onEdit) }
             item {
                 Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    PermissionCards(needsFullScreen = reminders.any { it.enabled && it.behavior.fullScreen })
+                    PermissionCards(needsFullScreen = reminders.any { it.enabled && it.behavior.effectiveFullScreen })
                 }
             }
             item {

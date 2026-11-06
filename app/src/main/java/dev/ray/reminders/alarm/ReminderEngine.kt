@@ -96,7 +96,7 @@ object ReminderEngine {
     fun swiped(ctx: Context, id: Int) {
         val r = store(ctx).get(id) ?: return
         if (!r.isActive) return
-        if (r.behavior.sticky) Notifier.show(ctx, r, alert = false) else done(ctx, id)
+        if (r.behavior.effectiveSticky) Notifier.show(ctx, r, alert = false) else done(ctx, id)
     }
 
     // ---------------------------------------------------------------- alarm callbacks
@@ -114,11 +114,11 @@ object ReminderEngine {
                 activate(ctx, id)
             }
             ACTION_SNOOZE_END -> if (r.snoozedUntil != null) activate(ctx, id)
-            ACTION_NAG -> if (r.isActive && r.behavior.nag) {
+            ACTION_NAG -> if (r.isActive && r.behavior.effectiveNag) {
                 Notifier.show(ctx, r, alert = true, fullScreen = r.fullScreenShownAt != null)
                 setAlarm(ctx, ACTION_NAG, id, now() + nagInterval(r))
             }
-            ACTION_FULLSCREEN -> if (r.isActive && r.behavior.fullScreen) {
+            ACTION_FULLSCREEN -> if (r.isActive && r.behavior.effectiveFullScreen) {
                 val shown = store(ctx).modify(id) { it.copy(fullScreenShownAt = now()) } ?: return
                 Notifier.show(ctx, shown, alert = true, fullScreen = true)
             }
@@ -163,8 +163,8 @@ object ReminderEngine {
         cancel(ctx, ACTION_NAG, r.id)
         cancel(ctx, ACTION_FULLSCREEN, r.id)
         val since = r.activeSince ?: return
-        if (r.behavior.nag) setAlarm(ctx, ACTION_NAG, r.id, now() + nagInterval(r))
-        if (r.behavior.fullScreen && r.fullScreenShownAt == null) {
+        if (r.behavior.effectiveNag) setAlarm(ctx, ACTION_NAG, r.id, now() + nagInterval(r))
+        if (r.behavior.effectiveFullScreen && r.fullScreenShownAt == null) {
             val at = since + r.behavior.fullScreenDelayMinutes * MINUTE
             setAlarm(ctx, ACTION_FULLSCREEN, r.id, maxOf(at, now() + 1_000))
         }

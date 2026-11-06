@@ -61,7 +61,7 @@ class AlarmActivity : ComponentActivity() {
         if (reminder == null || !reminder.isActive) {
             finish(); return
         }
-        startAlarm(reminder.behavior.alertStyle)
+        startAlarm(if (reminder.behavior.alarmOn) reminder.behavior.alertStyle else AlertStyle.SILENT)
 
         setContent {
             RemindersTheme {
@@ -109,7 +109,7 @@ class AlarmActivity : ComponentActivity() {
     }
 
     private fun startAlarm(style: AlertStyle) {
-        if (style == AlertStyle.SOUND_AND_VIBRATE) {
+        if (style == AlertStyle.SOUND_AND_VIBRATE || style == AlertStyle.SOUND_ONLY) {
             ringtone = RingtoneManager.getRingtone(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))
                 ?.apply {
                     audioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build()
@@ -117,7 +117,7 @@ class AlarmActivity : ComponentActivity() {
                     play()
                 }
         }
-        if (style != AlertStyle.SILENT) {
+        if (style == AlertStyle.SOUND_AND_VIBRATE || style == AlertStyle.VIBRATE_ONLY) {
             getSystemService(VibratorManager::class.java).defaultVibrator.vibrate(
                 VibrationEffect.createWaveform(longArrayOf(0, 800, 600), 0),
                 VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ALARM),

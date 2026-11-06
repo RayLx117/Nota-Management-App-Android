@@ -55,6 +55,7 @@ object Describe {
         val first = when (b.alertStyle) {
             AlertStyle.SOUND_AND_VIBRATE -> "A notification appears with sound and vibration."
             AlertStyle.VIBRATE_ONLY -> "A notification appears and vibrates (no sound)."
+            AlertStyle.SOUND_ONLY -> "A notification appears with sound (no vibration)."
             AlertStyle.SILENT -> "A notification appears silently."
         }
         return buildList {
@@ -87,7 +88,7 @@ object Describe {
     /** Line under a pinned reminder: "since 8:00 AM · every 15 min". */
     fun pinnedLine(r: Reminder): String = buildList {
         r.activeSince?.let { add("since ${clock(it)}") }
-        if (r.behavior.nag) add("every ${short(r.behavior.nagEveryMinutes)}")
+        if (r.behavior.effectiveNag) add("every ${short(r.behavior.nagEveryMinutes)}")
     }.joinToString(" · ")
 
     /** Compact schedule for list rows: "Daily", "Weekly · Mon, Wed", "Monthly · 1st". */
