@@ -1,6 +1,14 @@
 package dev.ray.reminders.ui
 
 import android.text.format.DateFormat
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -138,30 +146,51 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
 
         // ---------------------------------------------------------------- schedule
         SectionLabel("REPEAT")
-        ChipRow {
-            RepeatType.entries.forEach { type ->
-                DotChip(type.label, r.repeat == type) { r = r.copy(repeat = type) }
+        // The repeat wheel and everything that depends on it live in one card.
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Nota.Shelf).padding(bottom = 14.dp),
+        ) {
+            LoopWheel(
+                options = RepeatType.entries, selected = r.repeat, label = { it.label },
+                onSelect = { if (it != r.repeat) r = r.copy(repeat = it) },
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            AnimatedContent(
+                targetState = r.repeat,
+                transitionSpec = {
+                    // Slide in the direction the wheel moved (it wraps, so take the short way round).
+                    val n = RepeatType.entries.size
+                    val forward = (targetState.ordinal - initialState.ordinal + n) % n <= n / 2
+                    val dir = if (forward) 1 else -1
+                    (slideInHorizontally(tween(260)) { it / 3 * dir } + fadeIn(tween(260)))
+                        .togetherWith(slideOutHorizontally(tween(200)) { -it / 3 * dir } + fadeOut(tween(160)))
+                        .using(SizeTransform(clip = false) { _, _ -> tween(260) })
+                },
+                label = "repeat settings",
+            ) { type ->
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 14.dp).padding(top = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    if (type != RepeatType.ONCE) {
+                        Stepper("Every", "${r.interval} ${type.unit(r.interval)}",
+                            onMinus = { r = r.copy(interval = (r.interval - 1).coerceAtLeast(1)) },
+                            onPlus = { r = r.copy(interval = (r.interval + 1).coerceAtMost(99)) })
+                    }
+                    when (type) {
+                        // Weekly is anchored by the chosen days, so it has no date.
+                        RepeatType.WEEKLY -> WeekdayPicker(r.weekdays) { day ->
+                            val days = if (day in r.weekdays) r.weekdays - day else r.weekdays + day
+                            if (days.isNotEmpty()) r = r.copy(weekdays = days)
+                        }
+                        // Daily runs from today, so its date row just says so.
+                        RepeatType.DAILY -> ValueRow("Date", if (r.interval == 1) "Every day" else "Every ${r.interval} days", onClick = null)
+                        else -> ValueRow("Date", Describe.date(r.startEpochDay)) { showDate = true }
+                    }
+                    ValueRow("Time", Describe.time(r)) { showTime = true }
+                }
             }
         }
-        if (r.repeat != RepeatType.ONCE) {
-            Stepper("Every", "${r.interval} ${r.repeat.unit(r.interval)}",
-                onMinus = { r = r.copy(interval = (r.interval - 1).coerceAtLeast(1)) },
-                onPlus = { r = r.copy(interval = (r.interval + 1).coerceAtMost(99)) })
-        }
-        if (r.repeat == RepeatType.WEEKLY) {
-            WeekdayPicker(r.weekdays) { day ->
-                val days = if (day in r.weekdays) r.weekdays - day else r.weekdays + day
-                if (days.isNotEmpty()) r = r.copy(weekdays = days)
-            }
-        }
-        // Weekly reminders are anchored by the chosen days, so they don't need a start date.
-        // Daily runs from today, so its date row just says so.
-        when (r.repeat) {
-            RepeatType.WEEKLY -> Unit
-            RepeatType.DAILY -> ValueRow("Date", if (r.interval == 1) "Every day" else "Every ${r.interval} days", onClick = null)
-            else -> ValueRow("Date", Describe.date(r.startEpochDay)) { showDate = true }
-        }
-        ValueRow("Time", Describe.time(r)) { showTime = true }
 
         // ---------------------------------------------------------------- behaviour
         SectionLabel("ALERT")
@@ -342,7 +371,7 @@ private fun ToggleRow(
 @Composable
 private fun ValueRow(label: String, value: String, onClick: (() -> Unit)?) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nota.Shelf)
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nota.Raised)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -386,7 +415,7 @@ private fun WeekdayPicker(selected: Set<Int>, onToggle: (Int) -> Unit) {
         listOf(7, 1, 2, 3, 4, 5, 6).forEach { day -> // Sunday first
             val on = day in selected
             Box(
-                Modifier.size(40.dp).clip(CircleShape).background(if (on) Nota.Mint else Nota.Shelf).clickable { onToggle(day) },
+                Modifier.size(40.dp).clip(CircleShape).background(if (on) Nota.Mint else Nota.Raised).clickable { onToggle(day) },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
