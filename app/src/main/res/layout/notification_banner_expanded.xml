@@ -41,5 +41,5 @@
         android:paddingTop="8dp"
         android:maxLines="4"
         android:ellipsize="end"
-        android:textAppearance="@android:style/TextAppearance.DeviceDefault.Notification" />
+        android:textAppearance="@android:style/TextAppearance.Material.Notification" />
 </LinearLayout>
