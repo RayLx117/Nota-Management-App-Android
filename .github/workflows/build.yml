@@ -18,6 +18,13 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
+      # Reuse the same debug signing key across builds. Android only installs an update
+      # over an app signed with the same key, and runners otherwise make a new key each time.
+      - name: Reuse debug signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: debug-keystore-v1
       - name: Unit tests
         run: ./gradlew testDebugUnitTest
       - name: Build debug APK
