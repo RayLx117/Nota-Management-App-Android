@@ -80,7 +80,11 @@ fun SelectCircle(checked: Boolean, modifier: Modifier = Modifier) {
 
 /** Replaces the page title while selecting: close, count, and the trash can on the right. */
 @Composable
-fun SelectionBar(sel: Selection, noun: String, modifier: Modifier = Modifier) {
+fun SelectionBar(
+    sel: Selection, noun: String, modifier: Modifier = Modifier,
+    /** What deleting does; reminders/alarms by default. */
+    onDelete: ((Set<Int>) -> Unit)? = null,
+) {
     val ctx = LocalContext.current
     var confirm by remember { mutableStateOf(false) }
     val n = sel.selected.size
@@ -102,7 +106,7 @@ fun SelectionBar(sel: Selection, noun: String, modifier: Modifier = Modifier) {
             onDismissRequest = { confirm = false },
             title = { Text("Delete $what?") },
             confirmButton = {
-                TextButton(onClick = { deleteAll(ctx, sel.selected); sel.clear(); confirm = false }) {
+                TextButton(onClick = { (onDelete ?: { deleteAll(ctx, it) })(sel.selected); sel.clear(); confirm = false }) {
                     Text("Delete", color = Nota.Error)
                 }
             },

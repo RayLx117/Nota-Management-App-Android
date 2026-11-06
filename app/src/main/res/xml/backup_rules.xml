@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The password vault is bound to this phone's hardware keys, so never back it up or transfer it. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="passwords.vault" />
+        <exclude domain="sharedpref" path="vault.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="passwords.vault" />
+        <exclude domain="sharedpref" path="vault.xml" />
+    </device-transfer>
+</data-extraction-rules>

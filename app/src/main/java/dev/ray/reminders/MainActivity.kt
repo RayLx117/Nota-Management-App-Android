@@ -67,6 +67,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Passwords lock whenever Nota goes to the background.
+    override fun onStop() {
+        super.onStop()
+        dev.ray.reminders.data.Vault.lock()
+    }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         route(intent)
@@ -94,6 +100,7 @@ private enum class Tab(val label: String, val icon: Int) {
     ALARMS("Alarms", R.drawable.ic_tab_alarm),
     REMINDERS("Reminders", R.drawable.ic_tab_reminders),
     LISTS("Lists", R.drawable.ic_tab_lists),
+    NOTES("Notes", R.drawable.ic_tab_notes),
 }
 
 @Composable
@@ -175,6 +182,7 @@ private fun App(openTimer: Int, openLists: Int) {
                     onCalendar = { calendarKind = Kind.REMINDER },
                 )
                 Tab.LISTS -> dev.ray.reminders.ui.ListsScreen()
+                Tab.NOTES -> dev.ray.reminders.ui.NotesScreen(visible = pager.currentPage == Tab.NOTES.ordinal)
             }
         }
         // Bottom bar: tap to jump, or swipe between screens.
