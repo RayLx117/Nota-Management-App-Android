@@ -182,21 +182,22 @@ private fun UpcomingRow(r: Reminder, onClick: () -> Unit) {
                 Text(r.title, style = MaterialTheme.typography.titleMedium, color = Nota.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(Describe.shortSchedule(r), style = MaterialTheme.typography.bodySmall, color = Nota.Sub)
             }
+            val (time, day) = Describe.whenParts(r)
+            Column(horizontalAlignment = Alignment.End) {
+                Text(time, fontFamily = Nota.Mono, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Nota.Text)
+                Text(day, style = MaterialTheme.typography.bodySmall, color = Nota.Sub)
+            }
             // Pin: put it in the notification bar right now (only if it uses notifications).
+            // Same round outline style as the snooze button on the shelf.
             if (r.behavior.notification) {
                 val ctx = LocalContext.current
                 Box(
-                    Modifier.padding(end = 10.dp).size(36.dp).clip(CircleShape).background(Nota.Shelf)
+                    Modifier.padding(start = 12.dp).size(42.dp).clip(CircleShape).border(2.dp, Nota.Outline, CircleShape)
                         .clickable { ReminderEngine.testNow(ctx, r.id) },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(painterResource(R.drawable.ic_pin), contentDescription = "Pin", tint = Nota.Mint, modifier = Modifier.size(18.dp))
                 }
-            }
-            val (time, day) = Describe.whenParts(r)
-            Column(horizontalAlignment = Alignment.End) {
-                Text(time, fontFamily = Nota.Mono, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Nota.Text)
-                Text(day, style = MaterialTheme.typography.bodySmall, color = Nota.Sub)
             }
         }
         HorizontalDivider(color = Nota.Line)
