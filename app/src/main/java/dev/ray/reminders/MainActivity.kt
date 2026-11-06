@@ -52,12 +52,23 @@ import dev.ray.reminders.ui.ListScreen
 import dev.ray.reminders.ui.RemindersTheme
 
 class MainActivity : ComponentActivity() {
+    /** Bumped whenever a notification asks us to open the Timer tab. */
+    private val openTimer = androidx.compose.runtime.mutableIntStateOf(0)
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        if (intent.getStringExtra(EXTRA_TAB) == "timer") openTimer.intValue++
+    }
+
+    companion object { const val EXTRA_TAB = "tab" }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (intent?.getStringExtra(EXTRA_TAB) == "timer") openTimer.intValue++
         // Nota is always dark, so always use light status/navigation bar icons.
         enableEdgeToEdge(SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.dark(Color.TRANSPARENT))
         Notifier.ensureChannels(this)
-        setContent { RemindersTheme { App() } }
+        setContent { RemindersTheme { App(openTimer.intValue) } }
     }
 }
 
@@ -71,7 +82,7 @@ private enum class Tab(val label: String, val icon: Int) {
 }
 
 @Composable
-private fun App() {
+private fun App(openTimer: Int) {
     val ctx = LocalContext.current
     val store = remember { ReminderStore.get(ctx) }
     val items by store.items.collectAsState()
@@ -80,6 +91,9 @@ private fun App() {
     var editingKind by rememberSaveable { mutableStateOf(Kind.REMINDER) }
     val pager = rememberPagerState(initialPage = Tab.REMINDERS.ordinal) { Tab.entries.size }
     val scope = rememberCoroutineScope()
+    androidx.compose.runtime.LaunchedEffect(openTimer) {
+        if (openTimer > 0) { editingId = null; pager.scrollToPage(Tab.TIMER.ordinal) }
+    }
 
     val current = editingId
     if (current != null) {
@@ -98,7 +112,7 @@ private fun App() {
     Column(Modifier.fillMaxSize().background(Nota.Bg)) {
         HorizontalPager(pager, modifier = Modifier.weight(1f), beyondViewportPageCount = 1) { page ->
             when (Tab.entries[page]) {
-                Tab.TIMER -> ComingSoonScreen("Timer", "Countdown timers will live here.")
+                Tab.TIMER -> dev.ray.reminders.ui.TimerScreen()
                 Tab.ALARMS -> AlarmsScreen(
                     items.filter { it.kind == Kind.ALARM },
                     onAdd = { edit(Kind.ALARM, NEW) }, onEdit = { edit(Kind.ALARM, it) },

@@ -25,5 +25,6 @@ class RestoreReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         Notifier.ensureChannels(context)
         ReminderEngine.restoreAll(context)
+        Timer.restore(context)
     }
 }

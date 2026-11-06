@@ -36,6 +36,19 @@
             android:turnScreenOn="true"
             android:taskAffinity="dev.ray.reminders.alarm" />
 
+        <activity
+            android:name=".ui.TimerActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:taskAffinity="dev.ray.reminders.timer" />
+
+        <receiver
+            android:name=".alarm.TimerReceiver"
+            android:exported="false" />
+
         <receiver
             android:name=".alarm.ReminderReceiver"
             android:exported="false" />
