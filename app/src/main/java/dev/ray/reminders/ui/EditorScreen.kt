@@ -57,6 +57,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -601,7 +602,19 @@ private fun AlarmSettings(r: Reminder, onChange: (Reminder) -> Unit) {
     fun update(nb: Behavior) = onChange(r.copy(behavior = nb))
     var menu by remember { mutableStateOf(false) }
     Box {
-        ValueRow("Sound", b.alertStyle.label + "  ▾", onClick = { menu = true })
+        // Sound type: no title, just the choice and a green arrow that flips while open.
+        val arrow by animateFloatAsState(if (menu) 180f else 0f, label = "arrow")
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nota.Raised).clickable { menu = true }
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(b.alertStyle.label, style = MaterialTheme.typography.bodyLarge, color = Nota.Text, modifier = Modifier.weight(1f))
+            Icon(
+                Icons.Default.KeyboardArrowDown, contentDescription = "Choose sound", tint = Nota.Mint,
+                modifier = Modifier.size(28.dp).graphicsLayer { rotationZ = arrow },
+            )
+        }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = Nota.Shelf) {
             listOf(AlertStyle.SOUND_AND_VIBRATE, AlertStyle.SOUND_ONLY, AlertStyle.VIBRATE_ONLY).forEach { style ->
                 DropdownMenuItem(
