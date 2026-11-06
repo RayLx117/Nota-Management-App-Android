@@ -1,4 +1,4 @@
-# Reminders
+# Nota
 
 An Android 14+ reminder app where each reminder's schedule **and** the way it reminds you are fully configurable.
 Built with Kotlin and Jetpack Compose. No accounts, no network; reminders are stored on the device.

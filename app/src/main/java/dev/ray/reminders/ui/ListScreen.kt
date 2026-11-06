@@ -56,7 +56,7 @@ import dev.ray.reminders.data.Reminder
 @Composable
 fun ListScreen(reminders: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Unit) {
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Reminders") }) },
+        topBar = { TopAppBar(title = { Text("Nota") }) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onAdd,

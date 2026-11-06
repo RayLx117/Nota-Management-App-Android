@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "Reminders"
+rootProject.name = "Nota"
 include(":app")
