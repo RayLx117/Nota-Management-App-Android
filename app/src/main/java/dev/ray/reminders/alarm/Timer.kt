@@ -69,6 +69,8 @@ object Timer {
     const val ACTION_ADD = "dev.ray.reminders.timer.ADD"
 
     private const val CH_RUNNING = "timer_running"
+    // Live Updates need a channel that isn't low importance; this one stays silent anyway.
+    private const val CH_LIVE = "timer_live"
     private const val CH_DONE = "timer_done"
     private const val CH_DONE_VIBRATE = "timer_done_vibrate"
     private const val NOTIF_ID = 2_000_000
@@ -187,6 +189,11 @@ object Timer {
         nm(ctx).createNotificationChannels(
             listOf(
                 NotificationChannel(CH_RUNNING, "Timer: counting down", NotificationManager.IMPORTANCE_LOW),
+                NotificationChannel(CH_LIVE, "Timer: live countdown", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    setSound(null, null)
+                    enableVibration(false)
+                    setShowBadge(false)
+                },
                 NotificationChannel(CH_DONE, "Timer: time's up", NotificationManager.IMPORTANCE_HIGH).apply {
                     setSound(
                         RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
@@ -215,7 +222,7 @@ object Timer {
 
     private fun showRunning(ctx: Context, s: TimerState) {
         channels(ctx)
-        val b = Notification.Builder(ctx, CH_RUNNING)
+        val b = Notification.Builder(ctx, if (s.running) CH_LIVE else CH_RUNNING)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(s.label.ifBlank { "Timer" })
             .setOngoing(true)
@@ -224,6 +231,8 @@ object Timer {
             .setContentIntent(openApp(ctx))
             .setGroup("timer")
         if (s.running) {
+            // Android 16 Live Update: shows on the lock screen's Now Bar and as a status bar chip.
+            if (android.os.Build.VERSION.SDK_INT >= 36) b.setRequestPromotedOngoing(true)
             b.setUsesChronometer(true).setChronometerCountDown(true).setWhen(s.endAt).setShowWhen(true)
                 .addAction(action(ctx, "Pause", ACTION_PAUSE))
                 .addAction(action(ctx, "+1 min", ACTION_ADD))
