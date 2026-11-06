@@ -98,6 +98,9 @@ object Notifier {
             .setOngoing(r.behavior.sticky)
             .setAutoCancel(false)
             .setOnlyAlertOnce(!alert)
+            // Android bundles several ungrouped notifications from one app behind a dropdown.
+            // A group of its own per reminder (with no summary) keeps each one separate.
+            .setGroup("reminder-${r.id}")
             .setContentIntent(openApp)
             // Android 14+ lets people swipe away even "ongoing" notifications while unlocked.
             // We get told when that happens and put sticky reminders straight back.
