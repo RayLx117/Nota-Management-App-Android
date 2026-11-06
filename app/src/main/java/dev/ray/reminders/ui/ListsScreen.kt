@@ -118,11 +118,19 @@ fun ListsScreen() {
         Row(
             Modifier.fillMaxWidth().padding(vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             repeat(lists.size + 1) { i ->
                 val on = pager.currentPage == i
-                Box(
-                    Modifier.size(if (on) 8.dp else 6.dp).clip(CircleShape)
+                if (i == lists.size) {
+                    // The last spot is the "New list" card, so it's a + instead of a dot.
+                    Icon(
+                        Icons.Filled.Add, contentDescription = "New list",
+                        tint = if (on) Nota.Mint else Nota.Sub,
+                        modifier = Modifier.size(14.dp).clickable { scope.launch { pager.animateScrollToPage(i) } },
+                    )
+                } else Box(
+                    Modifier.align(Alignment.CenterVertically).size(if (on) 8.dp else 6.dp).clip(CircleShape)
                         .background(if (on) Nota.Mint else Nota.Outline)
                         .clickable { scope.launch { pager.animateScrollToPage(i) } },
                 )

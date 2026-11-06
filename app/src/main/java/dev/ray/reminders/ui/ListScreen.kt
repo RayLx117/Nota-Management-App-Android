@@ -59,17 +59,36 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import dev.ray.reminders.alarm.ReminderEngine
 import dev.ray.reminders.data.Reminder
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.runtime.key
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun ListScreen(reminders: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Unit) {
     val pinned = reminders.filter { it.isActive }.sortedBy { it.activeSince }
-    val upcoming = reminders.filterNot { it.isActive }.sortedWith(
+    val upcoming = reminders.filterNot { it.isActive }
+    // Every reminder lives in both places; each side only shows the ones that belong there, so a
+    // reminder that gets pinned (or dismissed) can glide between the shelf and Coming up.
+    val shelfOrder = reminders.sortedBy { it.activeSince ?: Long.MAX_VALUE }
+    val listOrder = reminders.sortedWith(
         compareByDescending<Reminder> { it.enabled }.thenBy { it.snoozedUntil ?: it.nextTriggerAt ?: Long.MAX_VALUE },
     )
     val sel = rememberSelection(reminders.map { it.id }.toSet())
-    Box(Modifier.fillMaxSize().background(Nota.Bg)) {
+    SharedTransitionLayout(Modifier.fillMaxSize().background(Nota.Bg)) {
+    val fx = this
+    Box(Modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 110.dp)) {
-            item { Shelf(pinned, sel, onEdit) }
+            item { Shelf(pinned, shelfOrder, fx, sel, onEdit) }
             item {
                 Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     PermissionCards()
@@ -89,13 +108,31 @@ fun ListScreen(reminders: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Un
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 )
             }
-            items(upcoming, key = { it.id }) { r -> UpcomingRow(r, sel, onClick = { onEdit(r.id) }) }
+            items(listOrder, key = { it.id }) { r ->
+                AnimatedVisibility(!r.isActive, enter = SLIDE_IN, exit = SLIDE_OUT) {
+                    UpcomingRow(r, sel, onClick = { onEdit(r.id) }, modifier = Modifier.glide(fx, r.id, this))
+                }
+            }
         }
         if (!sel.active) AddButton(
             onClick = onAdd,
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
         )
     }
+    }
+}
+
+private val SLIDE_IN = fadeIn(tween(300)) + expandVertically(tween(380, easing = FastOutSlowInEasing))
+private val SLIDE_OUT = fadeOut(tween(200)) + shrinkVertically(tween(380, easing = FastOutSlowInEasing))
+
+/** The same reminder on the shelf and in Coming up share bounds, so it slides from one to the other. */
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+private fun Modifier.glide(fx: SharedTransitionScope, id: Int, scope: AnimatedVisibilityScope): Modifier = with(fx) {
+    this@glide.sharedBounds(
+        rememberSharedContentState("reminder-$id"), scope,
+        boundsTransform = { _, _ -> tween(420, easing = FastOutSlowInEasing) },
+    )
 }
 
 /** Round mint-to-cyan "+" button for a new reminder or alarm. */
@@ -114,8 +151,9 @@ fun AddButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
 }
 
 /** The top "shelf": reminders currently sitting in your notification bar. */
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-private fun Shelf(pinned: List<Reminder>, sel: Selection, onEdit: (Int) -> Unit) {
+private fun Shelf(pinned: List<Reminder>, all: List<Reminder>, fx: SharedTransitionScope, sel: Selection, onEdit: (Int) -> Unit) {
     Column(
         Modifier.fillMaxWidth()
             .shadow(16.dp, RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
@@ -139,20 +177,28 @@ private fun Shelf(pinned: List<Reminder>, sel: Selection, onEdit: (Int) -> Unit)
             }
         }
         Text("PINNED TO YOUR BAR", style = Nota.Label, color = Nota.Sub, modifier = Modifier.padding(top = 16.dp, bottom = 10.dp))
-        if (pinned.isEmpty()) {
+        AnimatedVisibility(pinned.isEmpty(), enter = SLIDE_IN, exit = SLIDE_OUT) {
             Text("Nothing waiting on you right now.", style = MaterialTheme.typography.bodyMedium, color = Nota.Sub)
-        } else {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                pinned.forEach { PinnedBar(it, sel, onClick = { onEdit(it.id) }) }
+        }
+        Column {
+            all.forEach { r ->
+                key(r.id) {
+                    AnimatedVisibility(r.isActive, enter = SLIDE_IN, exit = SLIDE_OUT) {
+                        PinnedBar(
+                            r, sel, onClick = { onEdit(r.id) },
+                            modifier = Modifier.padding(top = if (r.id == pinned.firstOrNull()?.id) 0.dp else 12.dp).glide(fx, r.id, this),
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun PinnedBar(r: Reminder, sel: Selection, onClick: () -> Unit) {
+private fun PinnedBar(r: Reminder, sel: Selection, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
-    Box {
+    Box(modifier) {
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Nota.Raised).selectable(sel, r.id, onClick)
                 .padding(start = 16.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
@@ -175,9 +221,9 @@ private fun PinnedBar(r: Reminder, sel: Selection, onClick: () -> Unit) {
 
 /** A row in "Coming up": coloured line for the repeat type, time on the right. */
 @Composable
-private fun UpcomingRow(r: Reminder, sel: Selection, onClick: () -> Unit) {
+private fun UpcomingRow(r: Reminder, sel: Selection, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val alpha = if (r.enabled) 1f else 0.45f
-    Column(Modifier.fillMaxWidth().selectable(sel, r.id, onClick).padding(horizontal = 16.dp)) {
+    Column(modifier.fillMaxWidth().background(Nota.Bg).selectable(sel, r.id, onClick).padding(horizontal = 16.dp)) {
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
             if (sel.active) SelectCircle(sel.has(r.id), Modifier.padding(end = 12.dp))
             Row(Modifier.weight(1f).fillMaxHeight().alpha(alpha), verticalAlignment = Alignment.CenterVertically) {

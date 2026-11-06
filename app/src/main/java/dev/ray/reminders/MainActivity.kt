@@ -40,6 +40,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -106,7 +107,29 @@ private fun App(openTimer: Int, openLists: Int) {
         if (openLists > 0) { editingId = null; pager.scrollToPage(Tab.LISTS.ordinal) }
     }
 
-    val current = editingId
+    fun edit(kind: Kind, id: Int) { editingKind = kind; editingId = id }
+
+    // The editor rises in gently over the lists, and sinks back out when closed.
+    androidx.compose.animation.AnimatedContent(
+        editingId,
+        contentKey = { it != null },
+        transitionSpec = {
+            val ease = androidx.compose.animation.core.FastOutSlowInEasing
+            if (targetState != null) {
+                (androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(240, easing = ease)) +
+                    androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(320, easing = ease)) { it / 10 } +
+                    androidx.compose.animation.scaleIn(androidx.compose.animation.core.tween(320, easing = ease), initialScale = 0.98f)) togetherWith
+                    androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(200))
+            } else {
+                (androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(240, delayMillis = 60)) +
+                    androidx.compose.animation.scaleIn(androidx.compose.animation.core.tween(300, easing = ease), initialScale = 0.98f)) togetherWith
+                    (androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(200)) +
+                        androidx.compose.animation.slideOutVertically(androidx.compose.animation.core.tween(280, easing = ease)) { it / 10 })
+            }
+        },
+        modifier = Modifier.fillMaxSize().background(Nota.Bg),
+        label = "editor",
+    ) { current ->
     if (current != null) {
         BackHandler { editingId = null }
         EditorScreen(
@@ -115,11 +138,7 @@ private fun App(openTimer: Int, openLists: Int) {
             newId = { store.newId() },
             onClose = { editingId = null },
         )
-        return
-    }
-
-    fun edit(kind: Kind, id: Int) { editingKind = kind; editingId = id }
-
+    } else
     Column(Modifier.fillMaxSize().background(Nota.Bg)) {
         HorizontalPager(pager, modifier = Modifier.weight(1f), beyondViewportPageCount = 1, userScrollEnabled = false) { page ->
             when (Tab.entries[page]) {
@@ -163,5 +182,6 @@ private fun App(openTimer: Int, openLists: Int) {
                 }
             }
         }
+    }
     }
 }
