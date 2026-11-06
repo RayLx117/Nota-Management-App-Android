@@ -1,6 +1,11 @@
 package dev.ray.reminders.ui
 
 import android.text.format.DateFormat
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.keyframes
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -348,11 +353,14 @@ private fun ChipRow(content: @Composable () -> Unit) {
 @Composable
 private fun ToggleRow(
     title: String, checked: Boolean, indent: Boolean = false, enabled: Boolean = true, subtitle: String? = null,
+    modifier: Modifier = Modifier,
+    /** If set, tapping the row while it's disabled calls this (e.g. to explain why). */
+    onLockedTap: (() -> Unit)? = null,
     onChange: (Boolean) -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.35f)
-            .clickable(enabled = enabled) { onChange(!checked) }
+        modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.35f)
+            .clickable(enabled = enabled || onLockedTap != null) { if (enabled) onChange(!checked) else onLockedTap?.invoke() }
             .padding(start = if (indent) 16.dp else 0.dp, top = 2.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -360,7 +368,10 @@ private fun ToggleRow(
             Text(title, style = MaterialTheme.typography.bodyLarge, color = if (indent) Nota.Sub else Nota.Text)
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Nota.Sub)
         }
-        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled, colors = notaSwitchColors())
+        Switch(
+            checked = checked, onCheckedChange = if (enabled) onChange else null,
+            enabled = enabled, colors = notaSwitchColors(),
+        )
     }
 }
 
@@ -600,18 +611,42 @@ private fun AlarmSettings(r: Reminder, onChange: (Reminder) -> Unit) {
             }
         }
     }
-    ToggleRow("Repeat alert", b.nag) { update(b.copy(nag = it)) }
-    Stepper("Every", Describe.minutes(b.nagEveryMinutes), indent = true, enabled = b.nag,
-        onMinus = { update(b.copy(nagEveryMinutes = stepMinutes(b.nagEveryMinutes, -1, min = 1))) },
-        onPlus = { update(b.copy(nagEveryMinutes = stepMinutes(b.nagEveryMinutes, +1, min = 1))) })
+    Stepper("Snooze", Describe.minutes(b.alarmSnoozeMinutes),
+        onMinus = { update(b.copy(alarmSnoozeMinutes = stepMinutes(b.alarmSnoozeMinutes, -1, min = 1))) },
+        onPlus = { update(b.copy(alarmSnoozeMinutes = stepMinutes(b.alarmSnoozeMinutes, +1, min = 1))) })
     ToggleRow("Full-screen alarm", b.fullScreen) { update(b.copy(fullScreen = it)) }
+
+    // Delay counts from the notification appearing, so it needs the Notification box.
+    val scope = rememberCoroutineScope()
+    val shake = remember { Animatable(0f) }
+    var explain by remember { mutableStateOf(false) }
+    LaunchedEffect(explain) { if (explain) { delay(2500); explain = false } }
+    val delayAllowed = b.notification
     ToggleRow(
-        "Delay alarm", b.fullScreenDelay, indent = true, enabled = b.fullScreen,
+        "Delay alarm", b.fullScreenDelay && delayAllowed, indent = true, enabled = b.fullScreen && delayAllowed,
         subtitle = "Wait after the notification appears before the alarm takes over",
+        modifier = Modifier.offset { IntOffset(shake.value.roundToInt(), 0) },
+        onLockedTap = if (b.fullScreen && !delayAllowed) {
+            {
+                explain = true
+                scope.launch {
+                    shake.animateTo(0f, keyframes {
+                        durationMillis = 400
+                        -24f at 50; 24f at 120; -16f at 190; 16f at 260; -8f at 330
+                    })
+                }
+            }
+        } else null,
     ) { update(b.copy(fullScreenDelay = it)) }
+    AnimatedVisibility(explain) {
+        Text(
+            "Notification reminder must be on for this feature",
+            color = Nota.Error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 16.dp),
+        )
+    }
     Stepper(
         "Wait", Describe.minutes(b.fullScreenAfterMinutes.coerceAtLeast(1)), indent = true,
-        enabled = b.fullScreen && b.fullScreenDelay,
+        enabled = b.fullScreen && b.fullScreenDelay && delayAllowed,
         onMinus = { update(b.copy(fullScreenAfterMinutes = stepMinutes(b.fullScreenAfterMinutes, -1, min = 1))) },
         onPlus = { update(b.copy(fullScreenAfterMinutes = stepMinutes(b.fullScreenAfterMinutes, +1, min = 1))) },
     )

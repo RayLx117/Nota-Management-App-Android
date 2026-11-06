@@ -99,8 +99,8 @@ class AlarmActivity : ComponentActivity() {
                         PrimaryButton("Done", onClick = { ReminderEngine.done(this@AlarmActivity, id) }, modifier = Modifier.fillMaxWidth(), height = 64.dp)
                         Spacer(Modifier.height(12.dp))
                         SoftButton(
-                            "Snooze ${Describe.minutes(r.behavior.snoozeMinutes)}",
-                            onClick = { ReminderEngine.snooze(this@AlarmActivity, id) }, modifier = Modifier.fillMaxWidth(), height = 56.dp,
+                            "Snooze ${Describe.minutes(r.behavior.alarmSnoozeMinutes)}",
+                            onClick = { ReminderEngine.snooze(this@AlarmActivity, id, fromAlarm = true) }, modifier = Modifier.fillMaxWidth(), height = 56.dp,
                         )
                     }
                 }

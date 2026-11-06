@@ -84,9 +84,10 @@ object ReminderEngine {
         clearActive(ctx, id)
     }
 
-    fun snooze(ctx: Context, id: Int) {
+    fun snooze(ctx: Context, id: Int, fromAlarm: Boolean = false) {
         val r = store(ctx).get(id) ?: return
-        val until = now() + r.behavior.snoozeMinutes.coerceAtLeast(1) * MINUTE
+        val minutes = if (fromAlarm) r.behavior.alarmSnoozeMinutes else r.behavior.snoozeMinutes
+        val until = now() + minutes.coerceAtLeast(1) * MINUTE
         store(ctx).modify(id) { it.copy(activeSince = null, fullScreenShownAt = null, snoozedUntil = until) }
         clearActive(ctx, id)
         setAlarm(ctx, ACTION_SNOOZE_END, id, until)

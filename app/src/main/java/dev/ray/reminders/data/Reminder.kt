@@ -38,17 +38,21 @@ data class Behavior(
     val fullScreenAfterMinutes: Int = 60,
     /** Length of the Snooze button. */
     val snoozeMinutes: Int = 10,
+    /** Length of Snooze on the full-screen alarm. */
+    val alarmSnoozeMinutes: Int = 10,
 ) {
     /** Alarm box is on (old "Silent" reminders count as alarm off). */
     val alarmOn: Boolean get() = alarm && alertStyle != AlertStyle.SILENT
 
     // What actually happens, taking the two boxes into account.
     val effectiveSticky: Boolean get() = notification && sticky
-    val effectiveNag: Boolean get() = alarmOn && nag
+    // Repeat alert was replaced by alarm snooze in the editor, so it's no longer applied.
+    val effectiveNag: Boolean get() = false
     val effectiveFullScreen: Boolean get() = alarmOn && fullScreen
 
     /** Minutes between the notification appearing and the full-screen alarm. */
-    val fullScreenDelayMinutes: Int get() = if (fullScreenDelay) fullScreenAfterMinutes.coerceAtLeast(1) else 0
+    // The delay counts from the notification appearing, so it needs the Notification box on.
+    val fullScreenDelayMinutes: Int get() = if (fullScreenDelay && notification) fullScreenAfterMinutes.coerceAtLeast(1) else 0
 }
 
 @Serializable
