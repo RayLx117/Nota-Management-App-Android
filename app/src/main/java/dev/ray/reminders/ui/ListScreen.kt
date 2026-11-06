@@ -10,33 +10,31 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -44,86 +42,136 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import dev.ray.reminders.alarm.ReminderEngine
 import dev.ray.reminders.data.Reminder
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ListScreen(reminders: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Unit) {
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("Nota") }) },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onAdd,
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("New reminder") },
-            )
-        },
-    ) { padding ->
-        LazyColumn(
-            Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item { PermissionCards(needsFullScreen = reminders.any { it.enabled && it.behavior.fullScreen }) }
-            if (reminders.isEmpty()) item {
+    val pinned = reminders.filter { it.isActive }.sortedBy { it.activeSince }
+    val upcoming = reminders.filterNot { it.isActive }.sortedWith(
+        compareByDescending<Reminder> { it.enabled }.thenBy { it.snoozedUntil ?: it.nextTriggerAt ?: Long.MAX_VALUE },
+    )
+    Box(Modifier.fillMaxSize().background(Nota.Bg)) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 110.dp)) {
+            item { Shelf(pinned, onEdit) }
+            item {
+                Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    PermissionCards(needsFullScreen = reminders.any { it.enabled && it.behavior.fullScreen })
+                }
+            }
+            item {
                 Text(
-                    "No reminders yet. Tap \"New reminder\" to set one up, for example a daily supplement " +
-                        "reminder that stays in your notification bar until you tap Done.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(top = 32.dp),
+                    "COMING UP", style = Nota.Label, color = Nota.Sub,
+                    modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp),
                 )
             }
-            val sorted = reminders.sortedWith(
-                compareByDescending<Reminder> { it.isActive }.thenBy { it.nextTriggerAt ?: Long.MAX_VALUE },
-            )
-            items(sorted, key = { it.id }) { r -> ReminderRow(r, onClick = { onEdit(r.id) }) }
+            if (upcoming.isEmpty()) item {
+                Text(
+                    if (reminders.isEmpty()) "No reminders yet. Tap New reminder to add your first one."
+                    else "Nothing else scheduled.",
+                    style = MaterialTheme.typography.bodyMedium, color = Nota.Sub,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                )
+            }
+            items(upcoming, key = { it.id }) { r -> UpcomingRow(r, onClick = { onEdit(r.id) }) }
+        }
+        PrimaryButton(
+            "New reminder", onClick = onAdd,
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            height = 56.dp,
+        )
+    }
+}
+
+/** The top "shelf": reminders currently sitting in your notification bar. */
+@Composable
+private fun Shelf(pinned: List<Reminder>, onEdit: (Int) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth()
+            .shadow(16.dp, RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
+            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
+            .background(Nota.Shelf)
+            .statusBarsPadding()
+            .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 18.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.Top) {
+                Text("Nota", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp, color = Nota.Text)
+                Dot(size = 9.dp, modifier = Modifier.padding(start = 2.dp, top = 6.dp))
+            }
+            if (pinned.isNotEmpty()) {
+                Text(
+                    "${pinned.size} waiting", color = Nota.Ink, fontFamily = Nota.Outfit, fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Nota.Mint).padding(horizontal = 12.dp, vertical = 4.dp),
+                )
+            }
+        }
+        Text("PINNED TO YOUR BAR", style = Nota.Label, color = Nota.Sub, modifier = Modifier.padding(top = 16.dp, bottom = 10.dp))
+        if (pinned.isEmpty()) {
+            Text("Nothing waiting on you right now.", style = MaterialTheme.typography.bodyMedium, color = Nota.Sub)
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                pinned.forEach { PinnedBar(it, onClick = { onEdit(it.id) }) }
+            }
         }
     }
 }
 
 @Composable
-private fun ReminderRow(r: Reminder, onClick: () -> Unit) {
+private fun PinnedBar(r: Reminder, onClick: () -> Unit) {
     val ctx = LocalContext.current
-    val colors = if (r.isActive) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
-    else CardDefaults.cardColors()
-    Card(Modifier.fillMaxWidth().clickable(onClick = onClick), colors = colors) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(r.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(Describe.schedule(r), style = MaterialTheme.typography.bodyMedium)
-                }
-                Switch(checked = r.enabled, onCheckedChange = { ReminderEngine.setEnabled(ctx, r.id, it) })
+    Box {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Nota.Raised).clickable(onClick = onClick)
+                .padding(start = 16.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(r.title, style = MaterialTheme.typography.titleMedium, color = Nota.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(Describe.pinnedLine(r), style = MaterialTheme.typography.bodySmall, color = Nota.Sub)
             }
-            Spacer(Modifier.height(4.dp))
-            Text(Describe.status(r), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            Text(behaviorTags(r), style = MaterialTheme.typography.bodySmall)
-            if (r.isActive) {
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { ReminderEngine.done(ctx, r.id) }) { Text("Done") }
-                    TextButton(onClick = { ReminderEngine.snooze(ctx, r.id) }) {
-                        Text("Snooze ${Describe.minutes(r.behavior.snoozeMinutes)}")
-                    }
-                }
-            }
+            RoundButton("zz", filled = false, onClick = { ReminderEngine.snooze(ctx, r.id) })
+            RoundButton("✓", filled = true, onClick = { ReminderEngine.done(ctx, r.id) })
         }
+        Dot(
+            size = 14.dp,
+            modifier = Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp).border(3.dp, Nota.Shelf, CircleShape),
+        )
     }
 }
 
-private fun behaviorTags(r: Reminder): String {
-    val b = r.behavior
-    return buildList {
-        add(if (b.sticky) "Stays until Done" else "Swipeable")
-        if (b.nag) add("Repeats every ${Describe.minutes(b.nagEveryMinutes)}")
-        if (b.fullScreen) add("Full-screen after ${Describe.minutes(b.fullScreenAfterMinutes)}")
-    }.joinToString(" · ")
+/** A row in "Coming up": coloured line for the repeat type, time on the right. */
+@Composable
+private fun UpcomingRow(r: Reminder, onClick: () -> Unit) {
+    val alpha = if (r.enabled) 1f else 0.45f
+    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp).alpha(alpha)) {
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.width(5.dp).fillMaxHeight().clip(RoundedCornerShape(3.dp)).background(Nota.accent(r.repeat)))
+            Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
+                Text(r.title, style = MaterialTheme.typography.titleMedium, color = Nota.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(Describe.shortSchedule(r), style = MaterialTheme.typography.bodySmall, color = Nota.Sub)
+            }
+            val (time, day) = Describe.whenParts(r)
+            Column(horizontalAlignment = Alignment.End) {
+                Text(time, fontFamily = Nota.Mono, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Nota.Text)
+                Text(day, style = MaterialTheme.typography.bodySmall, color = Nota.Sub)
+            }
+        }
+        HorizontalDivider(color = Nota.Line)
+    }
 }
 
 /** Android 14+ needs a few permissions for this to work fully; show what's missing and how to fix it. */
@@ -146,17 +194,17 @@ private fun PermissionCards(needsFullScreen: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (!notificationsOk) PermissionCard(
             "Notifications are off",
-            "Reminders can't appear in your notification bar until you allow notifications.",
+            "Needed to show reminders.",
             "Allow",
         ) { notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
         if (!exactOk) PermissionCard(
             "Exact timing is off",
-            "Without the \"Alarms & reminders\" permission, Android may deliver reminders a few minutes late.",
+            "Reminders may arrive a few minutes late.",
             "Open settings",
         ) { ctx.openSettings(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM) }
         if (needsFullScreen && !fullScreenOk) PermissionCard(
             "Full-screen alarms are blocked",
-            "Android 14 requires you to allow full-screen notifications for this app. Until then they show as a pop-up instead.",
+            "Allow them so the alarm can take over the screen.",
             "Open settings",
         ) { ctx.openSettings(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT) }
     }
@@ -164,15 +212,16 @@ private fun PermissionCards(needsFullScreen: Boolean) {
 
 @Composable
 private fun PermissionCard(title: String, body: String, button: String, onClick: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Warning, contentDescription = null)
-                Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 8.dp))
-            }
-            Text(body, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 8.dp))
-            Button(onClick = onClick) { Text(button) }
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Nota.Raised)
+            .border(1.5.dp, Nota.Error.copy(alpha = 0.6f), RoundedCornerShape(18.dp)).padding(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Dot(size = 9.dp, color = Nota.Error)
+            Text(title, style = MaterialTheme.typography.titleSmall, color = Nota.Text, modifier = Modifier.padding(start = 8.dp))
         }
+        Text(body, style = MaterialTheme.typography.bodyMedium, color = Nota.Sub, modifier = Modifier.padding(vertical = 8.dp))
+        SoftButton(button, onClick = onClick, height = 42.dp, color = Nota.Mint)
     }
 }
 

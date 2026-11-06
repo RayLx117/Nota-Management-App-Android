@@ -5,15 +5,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import dev.ray.reminders.data.ImageStyle
-import dev.ray.reminders.data.Images
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -26,55 +17,61 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.ray.reminders.alarm.ReminderEngine
 import dev.ray.reminders.data.AlertStyle
 import dev.ray.reminders.data.Behavior
+import dev.ray.reminders.data.ImageStyle
+import dev.ray.reminders.data.Images
 import dev.ray.reminders.data.Reminder
 import dev.ray.reminders.data.ReminderStore
 import dev.ray.reminders.data.RepeatType
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import java.time.LocalDate
@@ -112,160 +109,81 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
         return cleaned
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(if (existing == null) "New reminder" else "Edit reminder") },
-                navigationIcon = {
-                    IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                },
-                actions = {
-                    if (existing != null) IconButton(onClick = { confirmDelete = true }) {
-                        Icon(Icons.Default.Delete, "Delete")
-                    }
-                },
+    Column(
+        Modifier.fillMaxSize().background(Nota.Bg).statusBarsPadding().navigationBarsPadding().imePadding()
+            .verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        // ---------------------------------------------------------------- header
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Nota.Text) }
+            Text(
+                if (existing == null) "New reminder" else "Edit", modifier = Modifier.weight(1f),
+                fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, color = Nota.Text,
             )
-        },
-    ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).imePadding().verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            OutlinedTextField(
-                value = r.title, onValueChange = { r = r.copy(title = it) },
-                label = { Text("Title") },
-                singleLine = true, modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = r.notes, onValueChange = { r = r.copy(notes = it) },
-                label = { Text("Notes (optional)") },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            PictureSection(
-                path = r.imagePath,
-                onPicked = { r = r.copy(imagePath = it) },
-                onRemove = { r = r.copy(imagePath = null) },
-            )
-            if (r.imagePath != null) {
-                Text("Show the picture as", style = MaterialTheme.typography.bodyMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = r.imageStyle == ImageStyle.PICTURE,
-                        onClick = { r = r.copy(imageStyle = ImageStyle.PICTURE) },
-                        label = { Text("Picture") },
-                    )
-                    FilterChip(
-                        selected = r.imageStyle == ImageStyle.BANNER,
-                        onClick = { r = r.copy(imageStyle = ImageStyle.BANNER) },
-                        label = { Text("Banner strip") },
-                    )
-                }
-                Text(
-                    if (r.imageStyle == ImageStyle.BANNER) "A strip across the notification, even when collapsed."
-                    else "A thumbnail on the side, and a big image when you expand the notification.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            if (existing != null) {
+                Switch(checked = r.enabled, onCheckedChange = { r = r.copy(enabled = it) }, colors = notaSwitchColors())
+                IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.Delete, "Delete", tint = Nota.Sub) }
             }
-
-            // ------------------------------------------------------------- schedule
-            SectionTitle("When")
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                RepeatType.entries.forEach { type ->
-                    FilterChip(
-                        selected = r.repeat == type,
-                        onClick = { r = r.copy(repeat = type) },
-                        label = { Text(type.label) },
-                    )
-                }
-            }
-            if (r.repeat != RepeatType.ONCE) {
-                Stepper(
-                    label = "Repeat every",
-                    valueText = "${r.interval} ${r.repeat.unit(r.interval)}",
-                    onMinus = { r = r.copy(interval = (r.interval - 1).coerceAtLeast(1)) },
-                    onPlus = { r = r.copy(interval = (r.interval + 1).coerceAtMost(99)) },
-                )
-            }
-            if (r.repeat == RepeatType.WEEKLY) {
-                Text("On these days", style = MaterialTheme.typography.bodyMedium)
-                WeekdayPicker(r.weekdays) { day ->
-                    val days = if (day in r.weekdays) r.weekdays - day else r.weekdays + day
-                    if (days.isNotEmpty()) r = r.copy(weekdays = days)
-                }
-            }
-            ValueRow(
-                label = when (r.repeat) {
-                    RepeatType.ONCE -> "Date"
-                    RepeatType.MONTHLY -> "Starting (repeats on this day of the month)"
-                    RepeatType.YEARLY -> "Starting (repeats on this date)"
-                    else -> "Starting"
-                },
-                value = Describe.date(r.startEpochDay),
-                onClick = { showDate = true },
-            )
-            ValueRow(label = "Time", value = Describe.time(r), onClick = { showTime = true })
-
-            // ------------------------------------------------------------- behaviour
-            SectionTitle("How to remind me")
-            Text("Alert", style = MaterialTheme.typography.bodyMedium)
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AlertStyle.entries.forEach { style ->
-                    FilterChip(
-                        selected = r.behavior.alertStyle == style,
-                        onClick = { behavior { copy(alertStyle = style) } },
-                        label = { Text(style.label) },
-                    )
-                }
-            }
-            ToggleRow(
-                title = "Stay in the notification bar until Done",
-                subtitle = "Can't be swiped away. Only the Done (or Snooze) button clears it.",
-                checked = r.behavior.sticky,
-            ) { behavior { copy(sticky = it) } }
-            ToggleRow(
-                title = "Keep alerting until Done",
-                subtitle = "Re-alerts (with your alert style above) on a timer.",
-                checked = r.behavior.nag,
-            ) { behavior { copy(nag = it) } }
-            if (r.behavior.nag) Stepper(
-                label = "Alert again every",
-                valueText = Describe.minutes(r.behavior.nagEveryMinutes),
-                onMinus = { behavior { copy(nagEveryMinutes = stepMinutes(nagEveryMinutes, -1, min = 1)) } },
-                onPlus = { behavior { copy(nagEveryMinutes = stepMinutes(nagEveryMinutes, +1, min = 1)) } },
-                indent = true,
-            )
-            ToggleRow(
-                title = "Full-screen alarm",
-                subtitle = "Takes over the screen and rings until you tap Done or Snooze.",
-                checked = r.behavior.fullScreen,
-            ) { behavior { copy(fullScreen = it) } }
-            if (r.behavior.fullScreen) Stepper(
-                label = "Show it after",
-                valueText = if (r.behavior.fullScreenAfterMinutes == 0) "Right away"
-                else Describe.minutes(r.behavior.fullScreenAfterMinutes),
-                onMinus = { behavior { copy(fullScreenAfterMinutes = stepMinutes(fullScreenAfterMinutes, -1, min = 0)) } },
-                onPlus = { behavior { copy(fullScreenAfterMinutes = stepMinutes(fullScreenAfterMinutes, +1, min = 0)) } },
-                indent = true,
-            )
-            Stepper(
-                label = "Snooze length",
-                valueText = Describe.minutes(r.behavior.snoozeMinutes),
-                onMinus = { behavior { copy(snoozeMinutes = stepMinutes(snoozeMinutes, -1, min = 1)) } },
-                onPlus = { behavior { copy(snoozeMinutes = stepMinutes(snoozeMinutes, +1, min = 1)) } },
-            )
-
-            // ------------------------------------------------------------- summary
-            Summary(r)
-
-            Button(onClick = { save(); onClose() }, modifier = Modifier.fillMaxWidth()) { Text("Save") }
-            OutlinedButton(
-                onClick = { val saved = save(); ReminderEngine.testNow(ctx, saved.id); onClose() },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Save and try it now") }
-            Spacer(Modifier.height(24.dp))
         }
+
+        NotaField(r.title, { r = r.copy(title = it) }, "Title", singleLine = true)
+        NotaField(r.notes, { r = r.copy(notes = it) }, "Notes")
+        PictureSection(r, onChange = { r = it })
+
+        // ---------------------------------------------------------------- schedule
+        SectionLabel("REPEAT")
+        ChipRow {
+            RepeatType.entries.forEach { type ->
+                DotChip(type.label, r.repeat == type) { r = r.copy(repeat = type) }
+            }
+        }
+        if (r.repeat != RepeatType.ONCE) {
+            Stepper("Every", "${r.interval} ${r.repeat.unit(r.interval)}",
+                onMinus = { r = r.copy(interval = (r.interval - 1).coerceAtLeast(1)) },
+                onPlus = { r = r.copy(interval = (r.interval + 1).coerceAtMost(99)) })
+        }
+        if (r.repeat == RepeatType.WEEKLY) {
+            WeekdayPicker(r.weekdays) { day ->
+                val days = if (day in r.weekdays) r.weekdays - day else r.weekdays + day
+                if (days.isNotEmpty()) r = r.copy(weekdays = days)
+            }
+        }
+        ValueRow(if (r.repeat == RepeatType.ONCE) "Date" else "Starts", Describe.date(r.startEpochDay)) { showDate = true }
+        ValueRow("Time", Describe.time(r)) { showTime = true }
+
+        // ---------------------------------------------------------------- behaviour
+        SectionLabel("ALERT")
+        ChipRow {
+            AlertStyle.entries.forEach { style ->
+                DotChip(style.label, r.behavior.alertStyle == style) { behavior { copy(alertStyle = style) } }
+            }
+        }
+        ToggleRow("Pin until Done", r.behavior.sticky) { behavior { copy(sticky = it) } }
+        ToggleRow("Repeat alert", r.behavior.nag) { behavior { copy(nag = it) } }
+        if (r.behavior.nag) Stepper("Every", Describe.minutes(r.behavior.nagEveryMinutes), indent = true,
+            onMinus = { behavior { copy(nagEveryMinutes = stepMinutes(nagEveryMinutes, -1, min = 1)) } },
+            onPlus = { behavior { copy(nagEveryMinutes = stepMinutes(nagEveryMinutes, +1, min = 1)) } })
+        ToggleRow("Full-screen alarm", r.behavior.fullScreen) { behavior { copy(fullScreen = it) } }
+        if (r.behavior.fullScreen) Stepper(
+            "After",
+            if (r.behavior.fullScreenAfterMinutes == 0) "Right away" else Describe.minutes(r.behavior.fullScreenAfterMinutes),
+            indent = true,
+            onMinus = { behavior { copy(fullScreenAfterMinutes = stepMinutes(fullScreenAfterMinutes, -1, min = 0)) } },
+            onPlus = { behavior { copy(fullScreenAfterMinutes = stepMinutes(fullScreenAfterMinutes, +1, min = 0)) } },
+        )
+        Stepper("Snooze", Describe.minutes(r.behavior.snoozeMinutes),
+            onMinus = { behavior { copy(snoozeMinutes = stepMinutes(snoozeMinutes, -1, min = 1)) } },
+            onPlus = { behavior { copy(snoozeMinutes = stepMinutes(snoozeMinutes, +1, min = 1)) } })
+
+        Summary(r)
+
+        PrimaryButton("Save", onClick = { save(); onClose() }, modifier = Modifier.fillMaxWidth())
+        SoftButton(
+            "Save and test", modifier = Modifier.fillMaxWidth(),
+            onClick = { val saved = save(); ReminderEngine.testNow(ctx, saved.id); onClose() },
+        )
+        Spacer(Modifier.height(16.dp))
     }
 
     if (showDate) {
@@ -300,7 +218,7 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
             title = { Text("Delete this reminder?") },
             confirmButton = {
                 TextButton(onClick = { ReminderEngine.delete(ctx, r.id); confirmDelete = false; onClose() }) {
-                    Text("Delete")
+                    Text("Delete", color = Nota.Error)
                 }
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
@@ -308,29 +226,30 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
     }
 }
 
+/** Two short lines: when it repeats, and when it will first go off. */
 @Composable
 private fun Summary(r: Reminder) {
     val first = remember(r) { ReminderEngine.nextOccurrence(r, System.currentTimeMillis()) }
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("What will happen", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Text(Describe.schedule(r), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-            Describe.behavior(r).forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
-            HorizontalDivider()
+    Row(
+        Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(18.dp)).background(Nota.Shelf).padding(16.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Dot(size = 9.dp, color = if (first == null) Nota.Error else Nota.Mint, modifier = Modifier.padding(top = 6.dp))
+        Column(Modifier.padding(start = 12.dp)) {
+            Text(Describe.schedule(r), style = MaterialTheme.typography.titleSmall, color = Nota.Text)
             Text(
-                if (first == null) "⚠ That time has already passed, so this won't go off. Pick a later date or time."
+                if (first == null) "That time has passed. Pick a later one."
                 else Describe.status(r.copy(nextTriggerAt = first, enabled = true, activeSince = null, snoozedUntil = null))
-                    .replace("Next:", "First reminder:"),
+                    .replace("Next:", "First:"),
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (first == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSecondaryContainer,
+                color = if (first == null) Nota.Error else Nota.Sub,
             )
         }
     }
 }
 
-/** Optional picture shown in the notification (thumbnail when collapsed, banner when expanded). */
 @Composable
-private fun PictureSection(path: String?, onPicked: (String) -> Unit, onRemove: () -> Unit) {
+private fun PictureSection(r: Reminder, onChange: (Reminder) -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var failed by remember { mutableStateOf(false) }
@@ -338,58 +257,75 @@ private fun PictureSection(path: String?, onPicked: (String) -> Unit, onRemove: 
         if (uri != null) scope.launch {
             val stored = withContext(Dispatchers.IO) { Images.import(ctx, uri) }
             failed = stored == null
-            stored?.let(onPicked)
+            stored?.let { onChange(r.copy(imagePath = it)) }
         }
     }
     fun pick() = picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
 
-    val bitmap = remember(path) { path?.let(Images::load)?.asImageBitmap() }
+    val bitmap = remember(r.imagePath) { r.imagePath?.let(Images::load)?.asImageBitmap() }
     if (bitmap != null) {
         Image(
-            bitmap, contentDescription = "Reminder picture",
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxWidth().height(140.dp).clip(RoundedCornerShape(12.dp)),
+            bitmap, contentDescription = "Picture", contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxWidth().height(120.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick = ::pick),
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = ::pick) { Text("Change picture") }
-            TextButton(onClick = onRemove) { Text("Remove") }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DotChip("Picture", r.imageStyle == ImageStyle.PICTURE) { onChange(r.copy(imageStyle = ImageStyle.PICTURE)) }
+            DotChip("Banner", r.imageStyle == ImageStyle.BANNER) { onChange(r.copy(imageStyle = ImageStyle.BANNER)) }
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { onChange(r.copy(imagePath = null)) }) { Text("Remove", color = Nota.Sub) }
         }
     } else {
-        OutlinedButton(onClick = ::pick) { Text("Add a picture (optional)") }
+        SoftButton("+ Picture", onClick = ::pick, height = 44.dp, color = Nota.Sub)
     }
-    if (failed) Text("Couldn't open that picture. Try another one.", color = MaterialTheme.colorScheme.error)
+    if (failed) Text("Couldn't open that picture.", color = Nota.Error, style = MaterialTheme.typography.bodySmall)
 }
 
 @Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = 12.dp),
+private fun NotaField(value: String, onChange: (String) -> Unit, label: String, singleLine: Boolean = false) {
+    OutlinedTextField(
+        value = value, onValueChange = onChange, label = { Text(label) }, singleLine = singleLine,
+        shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth(),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Nota.Mint, unfocusedBorderColor = Nota.Raised,
+            focusedContainerColor = Nota.Shelf, unfocusedContainerColor = Nota.Shelf,
+            focusedLabelColor = Nota.Mint, unfocusedLabelColor = Nota.Sub, cursorColor = Nota.Mint,
+        ),
     )
 }
 
 @Composable
-private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun SectionLabel(text: String) {
+    Text(text, style = Nota.Label, color = Nota.Sub, modifier = Modifier.padding(top = 12.dp))
+}
+
+@Composable
+private fun ChipRow(content: @Composable () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(vertical = 4.dp),
+        Modifier.horizontalScroll(rememberScrollState()).padding(top = 4.dp, end = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) { content() }
+}
+
+@Composable
+private fun ToggleRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f).padding(end = 12.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Switch(checked = checked, onCheckedChange = onChange)
+        Text(title, style = MaterialTheme.typography.bodyLarge, color = Nota.Text, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onChange, colors = notaSwitchColors())
     }
 }
 
 @Composable
 private fun ValueRow(label: String, value: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nota.Shelf).clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Text(value, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = Nota.Sub, modifier = Modifier.weight(1f))
+        Text(value, fontFamily = Nota.Mono, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Nota.Text)
     }
 }
 
@@ -399,11 +335,22 @@ private fun Stepper(label: String, valueText: String, onMinus: () -> Unit, onPlu
         Modifier.fillMaxWidth().padding(start = if (indent) 16.dp else 0.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        OutlinedButton(onClick = onMinus) { Text("−") }
-        Text(valueText, Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.bodyLarge)
-        OutlinedButton(onClick = onPlus) { Text("+") }
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = if (indent) Nota.Sub else Nota.Text, modifier = Modifier.weight(1f))
+        StepButton("−", onMinus)
+        Text(
+            valueText, modifier = Modifier.width(96.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            fontFamily = Nota.Outfit, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Nota.Text,
+        )
+        StepButton("+", onPlus)
     }
+}
+
+@Composable
+private fun StepButton(text: String, onClick: () -> Unit) {
+    Box(
+        Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Nota.Raised).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Text(text, color = Nota.Text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold) }
 }
 
 @Composable
@@ -412,14 +359,12 @@ private fun WeekdayPicker(selected: Set<Int>, onToggle: (Int) -> Unit) {
         (1..7).forEach { day ->
             val on = day in selected
             Box(
-                Modifier.size(40.dp).clip(CircleShape)
-                    .background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { onToggle(day) },
+                Modifier.size(40.dp).clip(CircleShape).background(if (on) Nota.Mint else Nota.Shelf).clickable { onToggle(day) },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     Describe.dayName(day, java.time.format.TextStyle.NARROW),
-                    color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (on) Nota.Ink else Nota.Sub, fontWeight = FontWeight.SemiBold,
                 )
             }
         }
@@ -439,7 +384,7 @@ private fun stepMinutes(value: Int, dir: Int, min: Int): Int {
 
 private val RepeatType.label: String
     get() = when (this) {
-        RepeatType.ONCE -> "One time"
+        RepeatType.ONCE -> "Once"
         RepeatType.DAILY -> "Daily"
         RepeatType.WEEKLY -> "Weekly"
         RepeatType.MONTHLY -> "Monthly"
@@ -456,7 +401,7 @@ private fun RepeatType.unit(n: Int): String {
 
 private val AlertStyle.label: String
     get() = when (this) {
-        AlertStyle.SOUND_AND_VIBRATE -> "Sound + vibrate"
-        AlertStyle.VIBRATE_ONLY -> "Vibrate only"
+        AlertStyle.SOUND_AND_VIBRATE -> "Sound"
+        AlertStyle.VIBRATE_ONLY -> "Vibrate"
         AlertStyle.SILENT -> "Silent"
     }

@@ -87,7 +87,7 @@ object Notifier {
             ReminderEngine.actionIntent(ctx, ReminderEngine.ACTION_SNOOZE, r.id),
         ).build()
 
-        val text = r.notes.ifBlank { if (r.behavior.sticky) "Tap Done when you've taken care of it" else "" }
+        val text = r.notes
         val builder = Notification.Builder(ctx, channel)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(r.title)

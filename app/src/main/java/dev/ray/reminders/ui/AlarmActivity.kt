@@ -12,6 +12,8 @@ import android.os.VibratorManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.remember
@@ -68,44 +70,38 @@ class AlarmActivity : ComponentActivity() {
                 // Done/Snooze from the notification (or anywhere else) closes this screen too.
                 LaunchedEffect(r?.isActive) { if (r == null || !r.isActive) finish() }
                 if (r != null) {
-                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.primaryContainer) {
-                        Column(
-                            Modifier.fillMaxSize().padding(32.dp),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(Describe.time(r), fontSize = 64.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                            Spacer(Modifier.height(16.dp))
-                            Text(
-                                r.title, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            )
-                            if (r.notes.isNotBlank()) {
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    r.notes, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                            }
-                            val picture = remember(r.imagePath) { r.imagePath?.let(Images::load)?.asImageBitmap() }
-                            if (picture != null) {
-                                Spacer(Modifier.height(24.dp))
-                                Image(
-                                    picture, contentDescription = null, contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(16.dp)),
-                                )
-                            }
-                            Spacer(Modifier.height(48.dp))
-                            Button(
-                                onClick = { ReminderEngine.done(this@AlarmActivity, id) },
-                                modifier = Modifier.fillMaxWidth().height(64.dp),
-                            ) { Text("Done", fontSize = 22.sp) }
-                            Spacer(Modifier.height(12.dp))
-                            OutlinedButton(
-                                onClick = { ReminderEngine.snooze(this@AlarmActivity, id) },
-                                modifier = Modifier.fillMaxWidth().height(56.dp),
-                            ) { Text("Snooze ${Describe.minutes(r.behavior.snoozeMinutes)}") }
+                    Column(
+                        Modifier.fillMaxSize().background(Nota.Bg).padding(28.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Dot(size = 14.dp)
+                        Spacer(Modifier.height(16.dp))
+                        Text(Describe.time(r), fontFamily = Nota.Mono, fontWeight = FontWeight.SemiBold, fontSize = 56.sp, color = Nota.Mint)
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            r.title, textAlign = TextAlign.Center, color = Nota.Text,
+                            fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp,
+                        )
+                        if (r.notes.isNotBlank()) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(r.notes, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, color = Nota.Sub)
                         }
+                        val picture = remember(r.imagePath) { r.imagePath?.let(Images::load)?.asImageBitmap() }
+                        if (picture != null) {
+                            Spacer(Modifier.height(24.dp))
+                            Image(
+                                picture, contentDescription = null, contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(24.dp)),
+                            )
+                        }
+                        Spacer(Modifier.height(48.dp))
+                        PrimaryButton("Done", onClick = { ReminderEngine.done(this@AlarmActivity, id) }, modifier = Modifier.fillMaxWidth(), height = 64.dp)
+                        Spacer(Modifier.height(12.dp))
+                        SoftButton(
+                            "Snooze ${Describe.minutes(r.behavior.snoozeMinutes)}",
+                            onClick = { ReminderEngine.snooze(this@AlarmActivity, id) }, modifier = Modifier.fillMaxWidth(), height = 56.dp,
+                        )
                     }
                 }
             }

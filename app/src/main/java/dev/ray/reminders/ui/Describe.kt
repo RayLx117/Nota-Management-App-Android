@@ -84,6 +84,47 @@ object Describe {
         else -> "No more occurrences"
     }
 
+    /** Line under a pinned reminder: "since 8:00 AM · every 15 min". */
+    fun pinnedLine(r: Reminder): String = buildList {
+        r.activeSince?.let { add("since ${clock(it)}") }
+        if (r.behavior.nag) add("every ${short(r.behavior.nagEveryMinutes)}")
+    }.joinToString(" · ")
+
+    /** Compact schedule for list rows: "Daily", "Weekly · Mon, Wed", "Monthly · 1st". */
+    fun shortSchedule(r: Reminder): String {
+        val start = LocalDate.ofEpochDay(r.startEpochDay)
+        val n = r.interval.coerceAtLeast(1)
+        return when (r.repeat) {
+            RepeatType.ONCE -> "Once"
+            RepeatType.DAILY -> if (n == 1) "Daily" else "Every $n days"
+            RepeatType.WEEKLY -> (if (n == 1) "Weekly" else "Every $n weeks") + " · " +
+                r.weekdays.ifEmpty { setOf(start.dayOfWeek.value) }.sorted().joinToString(", ") { dayName(it) }
+            RepeatType.MONTHLY -> (if (n == 1) "Monthly" else "Every $n months") + " · " + ordinal(start.dayOfMonth)
+            RepeatType.YEARLY -> (if (n == 1) "Yearly" else "Every $n years") + " · " + start.format(monthDayFmt)
+        }
+    }
+
+    /** Right side of a list row: (time, day label), e.g. ("10:00 AM", "tomorrow"). */
+    fun whenParts(r: Reminder, now: Long = System.currentTimeMillis()): Pair<String, String> {
+        if (!r.enabled) return time(r) to "off"
+        val at = r.snoozedUntil ?: r.nextTriggerAt ?: return time(r) to "done"
+        val zone = ZoneId.systemDefault()
+        val t = Instant.ofEpochMilli(at).atZone(zone)
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        val day = when (t.toLocalDate()) {
+            today -> "today"
+            today.plusDays(1) -> "tomorrow"
+            else -> t.format(monthDayFmt)
+        }
+        return t.toLocalTime().format(timeFmt) to (if (r.snoozedUntil != null) "snoozed" else day)
+    }
+
+    private fun short(m: Int): String = when {
+        m < 60 -> "$m min"
+        m % 60 == 0 -> "${m / 60} h"
+        else -> "${m / 60} h ${m % 60} min"
+    }
+
     fun minutes(m: Int): String = when {
         m < 60 -> if (m == 1) "1 minute" else "$m minutes"
         m % 60 == 0 -> (m / 60).let { if (it == 1) "1 hour" else "$it hours" }

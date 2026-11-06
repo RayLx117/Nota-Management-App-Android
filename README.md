@@ -46,3 +46,7 @@ The editor shows a plain-English **"What will happen"** summary of the exact sch
 - `alarm/ReminderEngine.kt` – every state change (fire, nag, full-screen, done, snooze, swipe, restore) and the AlarmManager alarms
 - `alarm/Notifier.kt` – notification channels and the notification itself
 - `ui/` – Compose screens: reminder list, editor, full-screen alarm
+
+## Fonts
+
+Outfit and JetBrains Mono (in `app/src/main/res/font`) are licensed under the SIL Open Font License 1.1.

@@ -1,3 +1,5 @@
 <resources>
-    <style name="Theme.Reminders" parent="android:Theme.Material.NoActionBar" />
+    <style name="Theme.Reminders" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/launcher_bg</item>
+    </style>
 </resources>
