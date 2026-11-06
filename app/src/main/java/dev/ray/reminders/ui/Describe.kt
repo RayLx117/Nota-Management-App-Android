@@ -58,6 +58,7 @@ object Describe {
         }
         return buildList {
             add(first)
+            if (r.imagePath != null) add("It shows your picture: a thumbnail, and a full-width banner when you expand it.")
             add(
                 if (b.sticky) "It stays in your notification bar until you tap Done. Swiping it away just brings it back."
                 else "You can swipe it away like a normal notification.",

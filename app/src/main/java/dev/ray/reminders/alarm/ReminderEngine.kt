@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import dev.ray.reminders.data.Images
 import dev.ray.reminders.data.Recurrence
 import dev.ray.reminders.data.Reminder
 import dev.ray.reminders.data.ReminderStore
@@ -46,6 +47,7 @@ object ReminderEngine {
 
     /** Create or update a reminder from the editor. */
     fun save(ctx: Context, edited: Reminder) {
+        store(ctx).get(edited.id)?.imagePath?.let { old -> if (old != edited.imagePath) Images.delete(old) }
         val next = if (edited.enabled) nextOccurrence(edited, now()) else null
         var r = edited.copy(nextTriggerAt = next)
         if (!r.enabled) r = r.copy(activeSince = null, fullScreenShownAt = null, snoozedUntil = null)
@@ -68,6 +70,7 @@ object ReminderEngine {
     fun delete(ctx: Context, id: Int) {
         listOf(ACTION_FIRE, ACTION_NAG, ACTION_FULLSCREEN, ACTION_SNOOZE_END).forEach { cancel(ctx, it, id) }
         Notifier.cancel(ctx, id)
+        store(ctx).get(id)?.imagePath?.let(Images::delete)
         store(ctx).delete(id)
     }
 

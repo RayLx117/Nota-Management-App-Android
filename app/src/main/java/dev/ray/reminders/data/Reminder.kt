@@ -41,6 +41,8 @@ data class Reminder(
     val weekdays: Set<Int> = emptySet(),
     val enabled: Boolean = true,
     val behavior: Behavior = Behavior(),
+    /** Optional picture shown in the notification and on the full-screen alarm (a file in app storage). */
+    val imagePath: String? = null,
 
     // ---- runtime state, managed by ReminderEngine ----
     /** Next scheduled occurrence (epoch millis), or null if none. */

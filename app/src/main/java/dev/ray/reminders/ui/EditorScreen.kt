@@ -1,6 +1,18 @@
 package dev.ray.reminders.ui
 
 import android.text.format.DateFormat
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import dev.ray.reminders.data.Images
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -130,6 +142,12 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
                 label = { Text("Notes (optional)") },
                 placeholder = { Text("Vitamin D, magnesium, omega-3") },
                 modifier = Modifier.fillMaxWidth(),
+            )
+
+            PictureSection(
+                path = r.imagePath,
+                onPicked = { r = r.copy(imagePath = it) },
+                onRemove = { r = r.copy(imagePath = null) },
             )
 
             // ------------------------------------------------------------- schedule
@@ -289,6 +307,38 @@ private fun Summary(r: Reminder) {
             )
         }
     }
+}
+
+/** Optional picture shown in the notification (thumbnail when collapsed, banner when expanded). */
+@Composable
+private fun PictureSection(path: String?, onPicked: (String) -> Unit, onRemove: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var failed by remember { mutableStateOf(false) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) scope.launch {
+            val stored = withContext(Dispatchers.IO) { Images.import(ctx, uri) }
+            failed = stored == null
+            stored?.let(onPicked)
+        }
+    }
+    fun pick() = picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+
+    val bitmap = remember(path) { path?.let(Images::load)?.asImageBitmap() }
+    if (bitmap != null) {
+        Image(
+            bitmap, contentDescription = "Reminder picture",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxWidth().height(140.dp).clip(RoundedCornerShape(12.dp)),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = ::pick) { Text("Change picture") }
+            TextButton(onClick = onRemove) { Text("Remove") }
+        }
+    } else {
+        OutlinedButton(onClick = ::pick) { Text("Add a picture (optional)") }
+    }
+    if (failed) Text("Couldn't open that picture. Try another one.", color = MaterialTheme.colorScheme.error)
 }
 
 @Composable

@@ -11,7 +11,14 @@ import android.os.VibrationEffect
 import android.os.VibratorManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.remember
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import dev.ray.reminders.data.Images
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -78,6 +85,14 @@ class AlarmActivity : ComponentActivity() {
                                 Text(
                                     r.notes, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                            }
+                            val picture = remember(r.imagePath) { r.imagePath?.let(Images::load)?.asImageBitmap() }
+                            if (picture != null) {
+                                Spacer(Modifier.height(24.dp))
+                                Image(
+                                    picture, contentDescription = null, contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(16.dp)),
                                 )
                             }
                             Spacer(Modifier.height(48.dp))

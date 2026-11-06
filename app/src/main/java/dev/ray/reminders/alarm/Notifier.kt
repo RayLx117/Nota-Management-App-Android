@@ -12,6 +12,7 @@ import android.media.RingtoneManager
 import dev.ray.reminders.MainActivity
 import dev.ray.reminders.R
 import dev.ray.reminders.data.AlertStyle
+import dev.ray.reminders.data.Images
 import dev.ray.reminders.data.Reminder
 import dev.ray.reminders.ui.AlarmActivity
 
@@ -88,7 +89,6 @@ object Notifier {
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(r.title)
             .setContentText(text)
-            .setStyle(Notification.BigTextStyle().bigText(text))
             .setCategory(if (fullScreen) Notification.CATEGORY_ALARM else Notification.CATEGORY_REMINDER)
             .setWhen(r.activeSince ?: System.currentTimeMillis())
             .setShowWhen(true)
@@ -101,6 +101,19 @@ object Notifier {
             .setDeleteIntent(ReminderEngine.actionIntent(ctx, ReminderEngine.ACTION_SWIPED, r.id))
             .addAction(done)
             .addAction(snooze)
+
+        val picture = r.imagePath?.let(Images::load)
+        if (picture != null) {
+            // Thumbnail on the right when collapsed, full-width banner when expanded.
+            builder.setStyle(
+                Notification.BigPictureStyle()
+                    .bigPicture(picture)
+                    .showBigPictureWhenCollapsed(true)
+                    .setSummaryText(text),
+            )
+        } else {
+            builder.setStyle(Notification.BigTextStyle().bigText(text))
+        }
 
         if (fullScreen) {
             val alarm = PendingIntent.getActivity(
