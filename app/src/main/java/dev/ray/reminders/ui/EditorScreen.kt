@@ -145,6 +145,7 @@ fun EditorScreen(existing: Reminder?, kind: Kind, newId: () -> Int, onClose: () 
     var showDate by remember { mutableStateOf(false) }
     var showTime by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var askFullScreen by remember { mutableStateOf(false) }
 
     fun behavior(change: Behavior.() -> Behavior) { r = r.copy(behavior = r.behavior.change()) }
     fun save(): Reminder {
@@ -260,7 +261,11 @@ fun EditorScreen(existing: Reminder?, kind: Kind, newId: () -> Int, onClose: () 
 
         Summary(r)
 
-        PrimaryButton("Save", onClick = { save(); onClose() }, modifier = Modifier.fillMaxWidth())
+        PrimaryButton("Save", onClick = {
+            // An alarm without the full-screen permission only shows as a notification: offer to fix that first.
+            if ((r.kind == Kind.ALARM || r.fx.alarmOn) && r.enabled && !ctx.fullScreenAllowed()) askFullScreen = true
+            else { save(); onClose() }
+        }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(16.dp))
     }
 
@@ -288,6 +293,21 @@ fun EditorScreen(existing: Reminder?, kind: Kind, newId: () -> Int, onClose: () 
             },
             dismissButton = { TextButton(onClick = { showTime = false }) { Text("Cancel") } },
             text = { TimePicker(state) },
+        )
+    }
+    if (askFullScreen) {
+        AlertDialog(
+            onDismissRequest = { askFullScreen = false },
+            title = { Text("Allow full-screen alarms?") },
+            text = { Text("Nota needs this so the alarm can take over your screen when it rings. Without it, you'll only get a notification.") },
+            confirmButton = {
+                TextButton(onClick = { askFullScreen = false; save(); ctx.openFullScreenSettings(); onClose() }) {
+                    Text("Allow", color = Nota.Mint)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { askFullScreen = false; save(); onClose() }) { Text("Not now", color = Nota.Sub) }
+            },
         )
     }
     if (confirmDelete) {

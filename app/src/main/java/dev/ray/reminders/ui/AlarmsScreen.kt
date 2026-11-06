@@ -40,6 +40,7 @@ fun AlarmsScreen(alarms: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Uni
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item { PageHeader("Alarms", Modifier.statusBarsPadding()) }
+            item { FullScreenWarning() }
             if (sorted.isEmpty()) item {
                 Text(
                     "No alarms yet.", style = MaterialTheme.typography.bodyMedium, color = Nota.Sub,

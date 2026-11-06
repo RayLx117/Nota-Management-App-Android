@@ -71,7 +71,7 @@ fun ListScreen(reminders: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Un
             item { Shelf(pinned, onEdit) }
             item {
                 Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    PermissionCards(needsFullScreen = reminders.any { it.enabled && it.fx.effectiveFullScreen })
+                    PermissionCards()
                 }
             }
             item {
@@ -125,7 +125,7 @@ private fun Shelf(pinned: List<Reminder>, onEdit: (Int) -> Unit) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.Top) {
-                Text("Nota", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp, color = Nota.Text)
+                Text("Reminders", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp, color = Nota.Text)
                 Dot(size = 9.dp, modifier = Modifier.padding(start = 2.dp, top = 6.dp))
             }
             if (pinned.isNotEmpty()) {
@@ -205,18 +205,17 @@ private fun UpcomingRow(r: Reminder, onClick: () -> Unit) {
 
 /** Android 14+ needs a few permissions for this to work fully; show what's missing and how to fix it. */
 @Composable
-private fun PermissionCards(needsFullScreen: Boolean) {
+private fun PermissionCards() {
     val ctx = LocalContext.current
     var refresh by remember { mutableIntStateOf(0) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refresh++ }
     val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { refresh++ }
 
     // Re-checked every time the app comes back to the foreground (e.g. from Settings).
-    val (notificationsOk, exactOk, fullScreenOk) = remember(refresh) {
-        Triple(
+    val (notificationsOk, exactOk) = remember(refresh) {
+        Pair(
             ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
             ctx.getSystemService(AlarmManager::class.java).canScheduleExactAlarms(),
-            ctx.getSystemService(NotificationManager::class.java).canUseFullScreenIntent(),
         )
     }
 
@@ -231,11 +230,6 @@ private fun PermissionCards(needsFullScreen: Boolean) {
             "Reminders may arrive a few minutes late.",
             "Open settings",
         ) { ctx.openSettings(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM) }
-        if (needsFullScreen && !fullScreenOk) PermissionCard(
-            "Full-screen alarms are blocked",
-            "Allow them so the alarm can take over the screen.",
-            "Open settings",
-        ) { ctx.openSettings(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT) }
     }
 }
 
@@ -254,6 +248,45 @@ private fun PermissionCard(title: String, body: String, button: String, onClick:
     }
 }
 
-private fun Context.openSettings(action: String) {
+fun Context.openSettings(action: String) {
     startActivity(Intent(action, Uri.parse("package:$packageName")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+}
+
+fun Context.fullScreenAllowed(): Boolean =
+    getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
+
+fun Context.openFullScreenSettings() = openSettings(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
+
+/** Bold red warning on the Alarms tab when Android won't let alarms take over the screen. */
+@Composable
+fun FullScreenWarning(modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+    var refresh by remember { mutableIntStateOf(0) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refresh++ }
+    val ok = remember(refresh) { ctx.fullScreenAllowed() }
+    if (ok) return
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Nota.Error.copy(alpha = 0.16f))
+            .border(2.dp, Nota.Error, RoundedCornerShape(20.dp)).padding(18.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Dot(size = 12.dp, color = Nota.Error)
+            Text(
+                "Full-screen alarms are blocked", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold,
+                fontSize = 19.sp, color = Nota.Text, modifier = Modifier.padding(start = 10.dp),
+            )
+        }
+        Text(
+            "Your alarms can't take over the screen when they ring.",
+            style = MaterialTheme.typography.bodyMedium, color = Nota.Text,
+            modifier = Modifier.padding(top = 8.dp, bottom = 14.dp),
+        )
+        Box(
+            Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(14.dp)).background(Nota.Error)
+                .clickable { ctx.openFullScreenSettings() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("Allow full-screen alarms", color = Nota.Ink, fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+        }
+    }
 }
