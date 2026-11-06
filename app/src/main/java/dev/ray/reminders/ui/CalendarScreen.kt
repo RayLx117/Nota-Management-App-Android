@@ -238,7 +238,7 @@ fun CalendarButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            androidx.compose.material.icons.Icons.Filled.DateRange, contentDescription = "Calendar",
+            androidx.compose.ui.res.painterResource(dev.ray.reminders.R.drawable.ic_calendar), contentDescription = "Calendar",
             tint = Nota.Mint, modifier = Modifier.size(20.dp),
         )
     }
