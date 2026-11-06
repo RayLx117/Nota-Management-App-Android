@@ -271,7 +271,7 @@ private fun PictureSection(r: Reminder, onChange: (Reminder) -> Unit) {
         if (uri != null) scope.launch {
             val stored = withContext(Dispatchers.IO) { Images.import(ctx, uri) }
             failed = stored == null
-            stored?.let { onChange(r.copy(imagePath = it)) }
+            stored?.let { onChange(r.copy(imagePath = it, imageStyle = if (r.imagePath == null) ImageStyle.BANNER else r.imageStyle)) }
         }
     }
     fun pick() = picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -283,8 +283,8 @@ private fun PictureSection(r: Reminder, onChange: (Reminder) -> Unit) {
             modifier = Modifier.fillMaxWidth().height(120.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick = ::pick),
         )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DotChip("Picture", r.imageStyle == ImageStyle.PICTURE) { onChange(r.copy(imageStyle = ImageStyle.PICTURE)) }
             DotChip("Banner", r.imageStyle == ImageStyle.BANNER) { onChange(r.copy(imageStyle = ImageStyle.BANNER)) }
+            DotChip("Picture", r.imageStyle == ImageStyle.PICTURE) { onChange(r.copy(imageStyle = ImageStyle.PICTURE)) }
             Spacer(Modifier.weight(1f))
             TextButton(onClick = { onChange(r.copy(imagePath = null)) }) { Text("Remove", color = Nota.Sub) }
         }

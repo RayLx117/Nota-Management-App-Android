@@ -51,7 +51,7 @@ data class Reminder(
     val behavior: Behavior = Behavior(),
     /** Optional picture shown in the notification and on the full-screen alarm (a file in app storage). */
     val imagePath: String? = null,
-    val imageStyle: ImageStyle = ImageStyle.PICTURE,
+    val imageStyle: ImageStyle = ImageStyle.BANNER,
 
     // ---- runtime state, managed by ReminderEngine ----
     /** Next scheduled occurrence (epoch millis), or null if none. */
