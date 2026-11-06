@@ -66,6 +66,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ray.reminders.alarm.Stopwatch
 import dev.ray.reminders.alarm.Timer
+import dev.ray.reminders.alarm.TimerPreset
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
@@ -189,6 +202,14 @@ private fun TimerSetup() {
             ),
         )
 
+        PresetRow(
+            onPick = { p ->
+                h = p.seconds / 3600; m = p.seconds % 3600 / 60; s = p.seconds % 60
+                label = p.name
+            },
+            currentSeconds = (total / 1000).toInt(), currentName = label,
+        )
+
         // Three wheels on one card, with a raised band marking the chosen row.
         Box(
             Modifier.fillMaxWidth().height(WHEEL_HEIGHT).clip(RoundedCornerShape(24.dp)).background(Nota.Shelf),
@@ -237,24 +258,106 @@ private fun Colon() {
 }
 
 private val ITEM_HEIGHT = 60.dp
-private val WHEEL_HEIGHT = 260.dp
+private val WHEEL_HEIGHT = 228.dp
+
+/** Quick-start chips, plus a pencil to save or remove your own named presets. */
+@Composable
+private fun PresetRow(onPick: (TimerPreset) -> Unit, currentSeconds: Int, currentName: String) {
+    val ctx = LocalContext.current
+    val presets by Timer.presets(ctx).collectAsState()
+    var editing by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            presets.forEach { p ->
+                Column(
+                    Modifier.clip(RoundedCornerShape(14.dp)).background(Nota.Raised).clickable { onPick(p) }
+                        .padding(horizontal = 14.dp, vertical = if (p.name.isBlank()) 12.dp else 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    if (p.name.isNotBlank()) Text(
+                        p.name, fontFamily = Nota.Outfit, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Nota.Text, maxLines = 1,
+                    )
+                    Text(
+                        Timer.shortDuration(p.seconds), fontFamily = Nota.Outfit,
+                        fontWeight = if (p.name.isBlank()) FontWeight.SemiBold else FontWeight.Normal,
+                        fontSize = if (p.name.isBlank()) 14.sp else 12.sp,
+                        color = if (p.name.isBlank()) Nota.Text else Nota.Mint,
+                    )
+                }
+            }
+        }
+        Box(
+            Modifier.padding(start = 8.dp).size(44.dp).clip(CircleShape).border(2.dp, Nota.Outline, CircleShape)
+                .clickable { editing = true },
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Filled.Edit, contentDescription = "Edit presets", tint = Nota.Mint, modifier = Modifier.size(20.dp)) }
+    }
+    if (editing) PresetsDialog(presets, currentSeconds, currentName, onDismiss = { editing = false })
+}
+
+@Composable
+private fun PresetsDialog(presets: List<TimerPreset>, currentSeconds: Int, currentName: String, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Nota.Shelf,
+        title = { Text("Presets") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                presets.forEachIndexed { i, p ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nota.Raised)
+                            .padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(p.name.ifBlank { Timer.shortDuration(p.seconds) }, color = Nota.Text, fontFamily = Nota.Outfit, fontWeight = FontWeight.SemiBold)
+                            if (p.name.isNotBlank()) Text(Timer.shortDuration(p.seconds), color = Nota.Sub, fontSize = 13.sp)
+                        }
+                        IconButton(onClick = { Timer.setPresets(ctx, presets.filterIndexed { j, _ -> j != i }) }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Remove", tint = Nota.Error)
+                        }
+                    }
+                }
+                val canSave = currentSeconds > 0
+                Spacer(Modifier.height(4.dp))
+                SoftButton(
+                    if (canSave) "Save " + (currentName.trim().ifBlank { Timer.shortDuration(currentSeconds) }) + " as a preset"
+                    else "Set a time to save it as a preset",
+                    onClick = { if (canSave) Timer.setPresets(ctx, presets + TimerPreset(currentName.trim(), currentSeconds)) },
+                    color = if (canSave) Nota.Mint else Nota.Sub, height = 46.dp, modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    "Uses the name and time currently set on the timer.",
+                    style = MaterialTheme.typography.bodySmall, color = Nota.Sub,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done", color = Nota.Mint) } },
+    )
+}
 
 /** An endless vertical number wheel (0 until [count]); the middle row is the value. */
 @Composable
 private fun NumberWheel(count: Int, value: Int, onChange: (Int) -> Unit, unit: String, modifier: Modifier = Modifier) {
-    val middle = remember(count) { (Int.MAX_VALUE / 2).let { it - it % count } }
-    val state = rememberPagerState(initialPage = middle + value) { Int.MAX_VALUE }
+    // Runs 0..max and stops at both ends (no wrapping round).
+    val state = rememberPagerState(initialPage = value) { count }
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     val currentOnChange by rememberUpdatedState(onChange)
     LaunchedEffect(state) {
         var first = true
-        snapshotFlow { state.currentPage }.collect { page ->
+        snapshotFlow { state.currentPage }.collect {
             if (!first) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             first = false
-            currentOnChange(page % count)
         }
     }
+    // Report the value once the wheel comes to rest, so a preset can spin it without a tug of war.
+    LaunchedEffect(state) { snapshotFlow { state.settledPage }.collect { currentOnChange(it) } }
+    LaunchedEffect(value) { if (state.settledPage != value) state.animateScrollToPage(value) }
     Box(modifier.fillMaxHeight(), contentAlignment = Alignment.Center) {
         VerticalPager(
             state = state,
@@ -266,6 +369,7 @@ private fun NumberWheel(count: Int, value: Int, onChange: (Int) -> Unit, unit: S
         ) { page ->
             val distance = ((page - state.currentPage) - state.currentPageOffsetFraction).absoluteValue
             val closeness = 1f - distance.coerceAtMost(2.5f) / 2.5f
+            
             Box(
                 Modifier.fillMaxWidth().height(ITEM_HEIGHT)
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
@@ -279,7 +383,7 @@ private fun NumberWheel(count: Int, value: Int, onChange: (Int) -> Unit, unit: S
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    "%02d".format(page % count), fontFamily = Nota.Mono, fontWeight = FontWeight.SemiBold,
+                    "%02d".format(page), fontFamily = Nota.Mono, fontWeight = FontWeight.SemiBold,
                     fontSize = 38.sp, color = lerp(Nota.Sub, Nota.Text, closeness),
                 )
             }

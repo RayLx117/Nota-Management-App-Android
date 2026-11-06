@@ -16,6 +16,7 @@ import dev.ray.reminders.R
 import dev.ray.reminders.ui.TimerActivity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.serialization.encodeToString
 
 /** One countdown timer. endAt > 0 = running; remaining > 0 with endAt == 0 = paused; ringing = done. */
 data class TimerState(
@@ -35,7 +36,31 @@ data class TimerState(
     }
 }
 
+@kotlinx.serialization.Serializable
+data class TimerPreset(val name: String = "", val seconds: Int)
+
 object Timer {
+    private val DEFAULT_PRESETS = listOf(TimerPreset(seconds = 600), TimerPreset(seconds = 900), TimerPreset(seconds = 1800))
+    private var presetFlow: MutableStateFlow<List<TimerPreset>>? = null
+
+    fun presets(ctx: Context): StateFlow<List<TimerPreset>> = presetFlow ?: MutableStateFlow(
+        prefs(ctx).getString("presets", null)?.let {
+            runCatching { dev.ray.reminders.data.ReminderStore.json.decodeFromString<List<TimerPreset>>(it) }.getOrNull()
+        } ?: DEFAULT_PRESETS,
+    ).also { presetFlow = it }
+
+    fun setPresets(ctx: Context, list: List<TimerPreset>) {
+        prefs(ctx).edit().putString("presets", dev.ray.reminders.data.ReminderStore.json.encodeToString(list)).apply()
+        (presets(ctx) as MutableStateFlow).value = list
+    }
+
+    /** "10 min", "1 h 30 min", "45 s", "2 min 30 s". */
+    fun shortDuration(seconds: Int): String {
+        val h = seconds / 3600; val m = seconds % 3600 / 60; val s = seconds % 60
+        return listOfNotNull(h.takeIf { it > 0 }?.let { "$it h" }, m.takeIf { it > 0 }?.let { "$it min" }, s.takeIf { it > 0 }?.let { "$it s" })
+            .joinToString(" ").ifEmpty { "0 s" }
+    }
+
     const val ACTION_DONE = "dev.ray.reminders.timer.DONE"
     const val ACTION_PAUSE = "dev.ray.reminders.timer.PAUSE"
     const val ACTION_RESUME = "dev.ray.reminders.timer.RESUME"
