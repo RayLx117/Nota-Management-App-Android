@@ -35,7 +35,7 @@ object Describe {
             RepeatType.ONCE -> "Once, on ${start.format(dateFmt)} $at"
             RepeatType.DAILY -> (if (n == 1) "Every day" else "Every $n days") + " $at"
             RepeatType.WEEKLY -> {
-                val days = r.weekdays.ifEmpty { setOf(start.dayOfWeek.value) }.sorted()
+                val days = r.weekdays.ifEmpty { setOf(start.dayOfWeek.value) }.sortedBy { it % 7 }
                 val dayText = if (days.size == 7) "every day" else days.joinToString(", ") { dayName(it) }
                 (if (n == 1) "Every week" else "Every $n weeks") + " on $dayText $at"
             }
@@ -98,7 +98,7 @@ object Describe {
             RepeatType.ONCE -> "Once"
             RepeatType.DAILY -> if (n == 1) "Daily" else "Every $n days"
             RepeatType.WEEKLY -> (if (n == 1) "Weekly" else "Every $n weeks") + " · " +
-                r.weekdays.ifEmpty { setOf(start.dayOfWeek.value) }.sorted().joinToString(", ") { dayName(it) }
+                r.weekdays.ifEmpty { setOf(start.dayOfWeek.value) }.sortedBy { it % 7 }.joinToString(", ") { dayName(it) }
             RepeatType.MONTHLY -> (if (n == 1) "Monthly" else "Every $n months") + " · " + ordinal(start.dayOfMonth)
             RepeatType.YEARLY -> (if (n == 1) "Yearly" else "Every $n years") + " · " + start.format(monthDayFmt)
         }

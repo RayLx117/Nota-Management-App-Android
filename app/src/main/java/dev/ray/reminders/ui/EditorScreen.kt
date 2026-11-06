@@ -372,7 +372,7 @@ private fun StepButton(text: String, onClick: () -> Unit, enabled: Boolean) {
 @Composable
 private fun WeekdayPicker(selected: Set<Int>, onToggle: (Int) -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        (1..7).forEach { day ->
+        listOf(7, 1, 2, 3, 4, 5, 6).forEach { day -> // Sunday first
             val on = day in selected
             Box(
                 Modifier.size(40.dp).clip(CircleShape).background(if (on) Nota.Mint else Nota.Shelf).clickable { onToggle(day) },
