@@ -161,7 +161,6 @@ private fun PinnedBar(r: Reminder, onClick: () -> Unit) {
                 Text(r.title, style = MaterialTheme.typography.titleMedium, color = Nota.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(Describe.pinnedLine(r), style = MaterialTheme.typography.bodySmall, color = Nota.Sub)
             }
-            RoundButton("zz", filled = false, onClick = { ReminderEngine.snooze(ctx, r.id) })
             RoundButton("✓", filled = true, onClick = { ReminderEngine.done(ctx, r.id) })
         }
         Dot(

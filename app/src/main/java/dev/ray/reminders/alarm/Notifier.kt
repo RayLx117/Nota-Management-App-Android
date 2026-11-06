@@ -14,6 +14,7 @@ import dev.ray.reminders.R
 import dev.ray.reminders.data.AlertStyle
 import dev.ray.reminders.data.ImageStyle
 import dev.ray.reminders.data.Images
+import dev.ray.reminders.data.Kind
 import android.view.View
 import android.widget.RemoteViews
 import dev.ray.reminders.data.Reminder
@@ -87,7 +88,7 @@ object Notifier {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val done = Notification.Action.Builder(
-            Icon.createWithResource(ctx, R.drawable.ic_check), "Done",
+            Icon.createWithResource(ctx, R.drawable.ic_check), if (r.kind == Kind.REMINDER) "Dismiss" else "Done",
             ReminderEngine.actionIntent(ctx, ReminderEngine.ACTION_DONE, r.id),
         ).build()
         val snooze = Notification.Action.Builder(
@@ -114,11 +115,13 @@ object Notifier {
             // We get told when that happens and put sticky reminders straight back.
             .setDeleteIntent(ReminderEngine.actionIntent(ctx, ReminderEngine.ACTION_SWIPED, r.id))
             .addAction(done)
-            .addAction(snooze)
+        // Reminders only offer Dismiss; alarms keep Snooze.
+        if (r.kind == Kind.ALARM) builder.addAction(snooze)
 
         // Pictures belong to the Notification box.
         val picture = if (r.fx.notification) r.imagePath?.let(Images::load) else null
-        if (picture != null && r.imageStyle == ImageStyle.BANNER) {
+        // Reminders only take banner pictures now.
+        if (picture != null && (r.imageStyle == ImageStyle.BANNER || r.kind == Kind.REMINDER)) {
             // A picture strip across the notification, with the title on top of it.
             val strip = Images.banner(picture)
             val collapsed = RemoteViews(ctx.packageName, R.layout.notification_banner_collapsed).apply {

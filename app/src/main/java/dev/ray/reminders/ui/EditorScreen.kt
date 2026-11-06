@@ -1,6 +1,9 @@
 package dev.ray.reminders.ui
 
 import android.text.format.DateFormat
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.ui.res.painterResource
 import dev.ray.reminders.R
 import androidx.compose.animation.animateContentSize
@@ -134,6 +137,7 @@ fun EditorScreen(existing: Reminder?, kind: Kind, newId: () -> Int, onClose: () 
                     id = newId(), kind = kind, title = "", repeat = if (kind == Kind.ALARM) RepeatType.ONCE else RepeatType.DAILY,
                     startEpochDay = today.toEpochDay(), hour = 9, minute = 0,
                     weekdays = setOf(today.dayOfWeek.value),
+                    behavior = if (kind == Kind.REMINDER) Behavior(alarm = false) else Behavior(),
                 )
             },
         )
@@ -251,8 +255,7 @@ fun EditorScreen(existing: Reminder?, kind: Kind, newId: () -> Int, onClose: () 
             SectionLabel("ALARM")
             AlarmOnlySettings(r, onChange = { r = it })
         } else {
-            SectionLabel("HOW TO REMIND ME")
-            DeliverySection(r, onChange = { r = it })
+            ReminderDelivery(r, onChange = { r = it })
         }
 
         Summary(r)
@@ -323,8 +326,9 @@ private fun Summary(r: Reminder) {
     }
 }
 
+/** Reminders take banner pictures only: a strip across the notification. */
 @Composable
-private fun PictureSection(r: Reminder, onChange: (Reminder) -> Unit) {
+private fun BannerSection(r: Reminder, onChange: (Reminder) -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var failed by remember { mutableStateOf(false) }
@@ -332,7 +336,7 @@ private fun PictureSection(r: Reminder, onChange: (Reminder) -> Unit) {
         if (uri != null) scope.launch {
             val stored = withContext(Dispatchers.IO) { Images.import(ctx, uri) }
             failed = stored == null
-            stored?.let { onChange(r.copy(imagePath = it, imageStyle = if (r.imagePath == null) ImageStyle.BANNER else r.imageStyle)) }
+            stored?.let { onChange(r.copy(imagePath = it, imageStyle = ImageStyle.BANNER)) }
         }
     }
     fun pick() = picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -340,17 +344,16 @@ private fun PictureSection(r: Reminder, onChange: (Reminder) -> Unit) {
     val bitmap = remember(r.imagePath) { r.imagePath?.let(Images::load)?.asImageBitmap() }
     if (bitmap != null) {
         Image(
-            bitmap, contentDescription = "Picture", contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxWidth().height(120.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick = ::pick),
+            bitmap, contentDescription = "Banner", contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxWidth().aspectRatio(3f).clip(RoundedCornerShape(14.dp)).clickable(onClick = ::pick),
         )
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DotChip("Banner", r.imageStyle == ImageStyle.BANNER) { onChange(r.copy(imageStyle = ImageStyle.BANNER)) }
-            DotChip("Picture", r.imageStyle == ImageStyle.PICTURE) { onChange(r.copy(imageStyle = ImageStyle.PICTURE)) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = ::pick) { Text("Change banner", color = Nota.Mint) }
             Spacer(Modifier.weight(1f))
             TextButton(onClick = { onChange(r.copy(imagePath = null)) }) { Text("Remove", color = Nota.Sub) }
         }
     } else {
-        SoftButton("+ Picture", onClick = ::pick, height = 44.dp, color = Nota.Sub)
+        SoftButton("Add Banner", onClick = ::pick, height = 44.dp, color = Nota.Mint)
     }
     if (failed) Text("Couldn't open that picture.", color = Nota.Error, style = MaterialTheme.typography.bodySmall)
 }
@@ -503,127 +506,48 @@ private val AlertStyle.label: String
 
 // ------------------------------------------------------------------------ Notification / Alarm
 
-private enum class DeliveryTab { NOTIFICATION, ALARM }
-
-/**
- * Two glowing boxes, Notification and Alarm, each with its own switch. Tapping a box brings it
- * to the front and shows its settings in the panel underneath. At least one must stay on.
- */
+/** Reminders: always a notification, plus an optional alarm (checkbox). */
 @Composable
-private fun DeliverySection(r: Reminder, onChange: (Reminder) -> Unit) {
+private fun ReminderDelivery(r: Reminder, onChange: (Reminder) -> Unit) {
     val b = r.behavior
-    var tab by rememberSaveable {
-        mutableStateOf(if (b.notification || !b.alarmOn) DeliveryTab.NOTIFICATION else DeliveryTab.ALARM)
-    }
-    var warn by remember { mutableStateOf(false) }
-    LaunchedEffect(warn) { if (warn) { delay(2500); warn = false } }
-
     fun update(nb: Behavior) = onChange(r.copy(behavior = nb))
-    fun toggle(t: DeliveryTab, on: Boolean) {
-        val nb = if (t == DeliveryTab.NOTIFICATION) b.copy(notification = on) else b.copy(alarm = on)
-        if (!nb.notification && !nb.alarmOn) { warn = true; return }
-        update(nb)
-        tab = t
-    }
 
-    Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        ModeBox(
-            "Notification", "Sits in your bar", on = b.notification, selected = tab == DeliveryTab.NOTIFICATION,
-            onSelect = { tab = DeliveryTab.NOTIFICATION }, onToggle = { toggle(DeliveryTab.NOTIFICATION, it) },
-            modifier = Modifier.weight(1f),
-        )
-        ModeBox(
-            "Alarm", "Sound & vibration", on = b.alarmOn, selected = tab == DeliveryTab.ALARM,
-            onSelect = { tab = DeliveryTab.ALARM }, onToggle = { toggle(DeliveryTab.ALARM, it) },
-            modifier = Modifier.weight(1f),
-        )
-    }
-    AnimatedVisibility(warn) {
-        Text("Keep at least one on", color = Nota.Error, style = MaterialTheme.typography.bodySmall)
-    }
-
-    // Little pointer that slides under the box whose settings are showing.
-    val bias by animateFloatAsState(if (tab == DeliveryTab.NOTIFICATION) -0.52f else 0.52f, label = "pointer")
-    Column {
-        Box(Modifier.fillMaxWidth().height(12.dp)) {
-            Canvas(Modifier.align(BiasAlignment(bias, 1f)).size(width = 22.dp, height = 12.dp)) {
-                drawPath(
-                    Path().apply { moveTo(size.width / 2, 0f); lineTo(size.width, size.height); lineTo(0f, size.height); close() },
-                    color = Nota.Shelf,
-                )
-            }
-        }
-        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Nota.Shelf)) {
-            AnimatedContent(
-                targetState = tab,
-                transitionSpec = {
-                    val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                    (slideInHorizontally(tween(260)) { it / 3 * dir } + fadeIn(tween(260)))
-                        .togetherWith(slideOutHorizontally(tween(200)) { -it / 3 * dir } + fadeOut(tween(160)))
-                        .using(SizeTransform(clip = false) { _, _ -> tween(260) })
-                },
-                label = "delivery settings",
-            ) { t ->
-                val on = if (t == DeliveryTab.NOTIFICATION) b.notification else b.alarmOn
-                Box {
-                    Column(
-                        Modifier.fillMaxWidth().alpha(if (on) 1f else 0.35f).padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        if (t == DeliveryTab.NOTIFICATION) NotificationSettings(r, onChange) else AlarmSettings(r, onChange)
-                    }
-                    // While a box is off its settings are greyed out; tapping them switches it on.
-                    if (!on) Box(
-                        Modifier.matchParentSize().clickable(
-                            interactionSource = remember { MutableInteractionSource() }, indication = null,
-                        ) { toggle(t, true) },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ModeBox(
-    title: String, caption: String, on: Boolean, selected: Boolean,
-    onSelect: () -> Unit, onToggle: (Boolean) -> Unit, modifier: Modifier = Modifier,
-) {
-    val shape = RoundedCornerShape(20.dp)
-    val border by animateColorAsState(if (on) Nota.Mint else Nota.Raised, label = "border")
-    val glow by animateDpAsState(if (on) 14.dp else 0.dp, label = "glow")
-    val scale by animateFloatAsState(if (selected) 1f else 0.94f, label = "scale")
-    val fade by animateFloatAsState(if (selected) 1f else 0.6f, label = "fade")
+    SectionLabel("NOTIFICATION")
     Column(
-        modifier
-            .graphicsLayer { scaleX = scale; scaleY = scale; alpha = fade }
-            .shadow(glow, shape, ambientColor = Nota.Mint, spotColor = Nota.Mint)
-            .clip(shape)
-            .background(if (selected) Nota.Raised else Nota.Shelf)
-            .border(2.dp, border, shape)
-            .clickable(onClick = onSelect)
-            .padding(start = 14.dp, end = 10.dp, top = 8.dp, bottom = 14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Nota.Shelf).padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Dot(size = 9.dp, color = if (on) Nota.Mint else Nota.Outline)
-            Spacer(Modifier.weight(1f))
-            Switch(checked = on, onCheckedChange = onToggle, colors = notaSwitchColors())
-        }
-        Text(title, fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = Nota.Text)
-        Text(caption, style = MaterialTheme.typography.bodySmall, color = Nota.Sub)
+        ToggleRow("Silent", b.notificationSilent) { update(b.copy(notificationSilent = it)) }
+        ToggleRow("Pin until Dismissed", b.sticky) { update(b.copy(sticky = it)) }
+        BannerSection(r, onChange)
     }
-}
 
-@Composable
-private fun NotificationSettings(r: Reminder, onChange: (Reminder) -> Unit) {
-    val b = r.behavior
-    fun update(nb: Behavior) = onChange(r.copy(behavior = nb))
-    ToggleRow("Silent", b.notificationSilent) { update(b.copy(notificationSilent = it)) }
-    ToggleRow("Pin until Done", b.sticky) { update(b.copy(sticky = it)) }
-    Stepper("Snooze", Describe.minutes(b.snoozeMinutes),
-        onMinus = { update(b.copy(snoozeMinutes = stepMinutes(b.snoozeMinutes, -1, min = 1))) },
-        onPlus = { update(b.copy(snoozeMinutes = stepMinutes(b.snoozeMinutes, +1, min = 1))) })
-    PictureSection(r, onChange)
+    // Alarm: a checkbox; its settings stay visible but greyed out until it's checked.
+    Row(
+        Modifier.fillMaxWidth().padding(top = 12.dp).clip(RoundedCornerShape(14.dp))
+            .clickable { update(b.copy(alarm = !b.alarmOn, alertStyle = b.alertStyle.takeIf { it != AlertStyle.SILENT } ?: AlertStyle.SOUND_AND_VIBRATE)) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(
+            checked = b.alarmOn,
+            onCheckedChange = { update(b.copy(alarm = it, alertStyle = b.alertStyle.takeIf { s -> s != AlertStyle.SILENT } ?: AlertStyle.SOUND_AND_VIBRATE)) },
+            colors = CheckboxDefaults.colors(checkedColor = Nota.Mint, checkmarkColor = Nota.Ink, uncheckedColor = Nota.Outline),
+        )
+        Text("ALARM", style = Nota.Label, color = if (b.alarmOn) Nota.Text else Nota.Sub)
+    }
+    Box {
+        Column(
+            Modifier.fillMaxWidth().alpha(if (b.alarmOn) 1f else 0.35f)
+                .clip(RoundedCornerShape(22.dp)).background(Nota.Shelf).padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) { AlarmSettings(r, onChange) }
+        // Greyed out: tapping the settings checks the box.
+        if (!b.alarmOn) Box(
+            Modifier.matchParentSize().clickable(
+                interactionSource = remember { MutableInteractionSource() }, indication = null,
+            ) { update(b.copy(alarm = true, alertStyle = b.alertStyle.takeIf { it != AlertStyle.SILENT } ?: AlertStyle.SOUND_AND_VIBRATE)) },
+        )
+    }
 }
 
 @Composable

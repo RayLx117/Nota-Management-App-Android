@@ -101,7 +101,8 @@ data class Reminder(
      * have no notification of their own (apart from the optional heads-up before they ring).
      */
     val fx: Behavior
-        get() = if (kind == Kind.REMINDER) behavior else behavior.copy(
+        // Reminders are always a notification (the Notification/Alarm boxes are gone).
+        get() = if (kind == Kind.REMINDER) behavior.copy(notification = true) else behavior.copy(
             notification = false, alarm = true, fullScreenDelay = false,
             alertStyle = if (behavior.alertStyle == AlertStyle.SILENT) AlertStyle.SOUND_AND_VIBRATE else behavior.alertStyle,
         )

@@ -120,12 +120,12 @@ fun Dot(size: Dp = 8.dp, color: Color = Nota.Mint, modifier: Modifier = Modifier
 @Composable
 fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, height: Dp = 52.dp) {
     Row(
-        modifier.clip(RoundedCornerShape(16.dp)).background(Nota.Text).clickable(onClick = onClick)
+        modifier.clip(RoundedCornerShape(16.dp)).background(Nota.Mint).clickable(onClick = onClick)
             .padding(horizontal = 20.dp).height(height),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
     ) {
-        Dot()
+        Dot(color = Nota.Ink)
         Text(text, color = Nota.Ink, fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
     }
 }
