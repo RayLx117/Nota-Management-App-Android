@@ -1,6 +1,8 @@
 package dev.ray.reminders.ui
 
 import android.text.format.DateFormat
+import androidx.compose.ui.res.painterResource
+import dev.ray.reminders.R
 import androidx.compose.animation.animateContentSize
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.animation.core.Animatable
@@ -162,6 +164,19 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
                 if (existing == null) "New reminder" else "Edit", modifier = Modifier.weight(1f),
                 fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, color = Nota.Text,
             )
+            // Pin: save and put it in the notification bar right now.
+            if (r.behavior.notification) {
+                Row(
+                    Modifier.padding(end = 4.dp).clip(RoundedCornerShape(12.dp)).background(Nota.Raised)
+                        .clickable { val saved = save(); ReminderEngine.testNow(ctx, saved.id); onClose() }
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(painterResource(R.drawable.ic_pin), contentDescription = null, tint = Nota.Mint, modifier = Modifier.size(18.dp))
+                    Text("Pin", color = Nota.Text, fontFamily = Nota.Outfit, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
+                        modifier = Modifier.padding(start = 4.dp))
+                }
+            }
             if (existing != null) {
                 Switch(checked = r.enabled, onCheckedChange = { r = r.copy(enabled = it) }, colors = notaSwitchColors())
                 IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.Delete, "Delete", tint = Nota.Sub) }
@@ -226,10 +241,6 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
         Summary(r)
 
         PrimaryButton("Save", onClick = { save(); onClose() }, modifier = Modifier.fillMaxWidth())
-        SoftButton(
-            "Save and start", modifier = Modifier.fillMaxWidth(),
-            onClick = { val saved = save(); ReminderEngine.testNow(ctx, saved.id); onClose() },
-        )
         Spacer(Modifier.height(16.dp))
     }
 

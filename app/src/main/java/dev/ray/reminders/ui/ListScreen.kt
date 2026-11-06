@@ -1,6 +1,9 @@
 package dev.ray.reminders.ui
 
 import android.Manifest
+import androidx.compose.material3.Icon
+import androidx.compose.ui.res.painterResource
+import dev.ray.reminders.R
 import android.app.AlarmManager
 import android.app.NotificationManager
 import android.content.Context
@@ -178,6 +181,17 @@ private fun UpcomingRow(r: Reminder, onClick: () -> Unit) {
             Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
                 Text(r.title, style = MaterialTheme.typography.titleMedium, color = Nota.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(Describe.shortSchedule(r), style = MaterialTheme.typography.bodySmall, color = Nota.Sub)
+            }
+            // Pin: put it in the notification bar right now (only if it uses notifications).
+            if (r.behavior.notification) {
+                val ctx = LocalContext.current
+                Box(
+                    Modifier.padding(end = 10.dp).size(36.dp).clip(CircleShape).background(Nota.Shelf)
+                        .clickable { ReminderEngine.testNow(ctx, r.id) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(painterResource(R.drawable.ic_pin), contentDescription = "Pin", tint = Nota.Mint, modifier = Modifier.size(18.dp))
+                }
             }
             val (time, day) = Describe.whenParts(r)
             Column(horizontalAlignment = Alignment.End) {
