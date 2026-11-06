@@ -1,6 +1,8 @@
 package dev.ray.reminders.ui
 
 import android.text.format.DateFormat
+import androidx.compose.animation.animateContentSize
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.keyframes
 import androidx.compose.foundation.layout.offset
@@ -601,12 +603,12 @@ private fun AlarmSettings(r: Reminder, onChange: (Reminder) -> Unit) {
     val b = r.behavior
     fun update(nb: Behavior) = onChange(r.copy(behavior = nb))
     var menu by remember { mutableStateOf(false) }
-    Box {
-        // Sound type: no title, just the choice and a green arrow that flips while open.
-        val arrow by animateFloatAsState(if (menu) 180f else 0f, label = "arrow")
+    // Sound type: no title, just the choice and a green arrow. Opening it extends the same
+    // grey box downward to reveal the other options, rather than a separate popup.
+    val arrow by animateFloatAsState(if (menu) 180f else 0f, label = "arrow")
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nota.Raised).animateContentSize()) {
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nota.Raised).clickable { menu = true }
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+            Modifier.fillMaxWidth().clickable { menu = !menu }.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(b.alertStyle.label, style = MaterialTheme.typography.bodyLarge, color = Nota.Text, modifier = Modifier.weight(1f))
@@ -615,13 +617,17 @@ private fun AlarmSettings(r: Reminder, onChange: (Reminder) -> Unit) {
                 modifier = Modifier.size(28.dp).graphicsLayer { rotationZ = arrow },
             )
         }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = Nota.Shelf) {
-            listOf(AlertStyle.SOUND_AND_VIBRATE, AlertStyle.SOUND_ONLY, AlertStyle.VIBRATE_ONLY).forEach { style ->
-                DropdownMenuItem(
-                    text = { Text(style.label, color = if (style == b.alertStyle) Nota.Mint else Nota.Text) },
-                    onClick = { update(b.copy(alertStyle = style)); menu = false },
-                )
-            }
+        if (menu) {
+            listOf(AlertStyle.SOUND_AND_VIBRATE, AlertStyle.SOUND_ONLY, AlertStyle.VIBRATE_ONLY)
+                .filter { it != b.alertStyle }
+                .forEach { style ->
+                    HorizontalDivider(color = Nota.Outline.copy(alpha = 0.5f), modifier = Modifier.padding(horizontal = 16.dp))
+                    Text(
+                        style.label, style = MaterialTheme.typography.bodyLarge, color = Nota.Sub,
+                        modifier = Modifier.fillMaxWidth().clickable { update(b.copy(alertStyle = style)); menu = false }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                    )
+                }
         }
     }
     Stepper("Snooze", Describe.minutes(b.alarmSnoozeMinutes),
