@@ -85,6 +85,9 @@ import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 
+/** A list to jump to when the Lists tab opens (from a widget). */
+object ListsNav { val open = kotlinx.coroutines.flow.MutableStateFlow<Int?>(null) }
+
 /** The Lists tab: every list is a rounded card; swipe between them, the last card makes a new one. */
 @Composable
 fun ListsScreen() {
@@ -95,6 +98,14 @@ fun ListsScreen() {
     val scope = rememberCoroutineScope()
     var creating by remember { mutableStateOf(false) }
     var jumpTo by remember { mutableStateOf<Int?>(null) }
+
+    // Opened from a widget: go straight to that list.
+    val requested by ListsNav.open.collectAsState()
+    LaunchedEffect(requested, lists.size) {
+        val id = requested ?: return@LaunchedEffect
+        val index = lists.indexOfFirst { it.id == id }
+        if (index >= 0) { pager.scrollToPage(index); ListsNav.open.value = null }
+    }
 
     // After creating a list, slide over to it once it exists.
     LaunchedEffect(jumpTo, lists.size) {

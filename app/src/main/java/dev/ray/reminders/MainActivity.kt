@@ -60,7 +60,10 @@ class MainActivity : ComponentActivity() {
     private fun route(intent: android.content.Intent?) {
         when (intent?.getStringExtra(EXTRA_TAB)) {
             "timer" -> openTimer.intValue++
-            "lists" -> openLists.intValue++
+            "lists" -> {
+                openLists.intValue++
+                intent.getIntExtra(EXTRA_LIST, -1).takeIf { it >= 0 }?.let { dev.ray.reminders.ui.ListsNav.open.value = it }
+            }
         }
     }
 
@@ -69,7 +72,10 @@ class MainActivity : ComponentActivity() {
         route(intent)
     }
 
-    companion object { const val EXTRA_TAB = "tab" }
+    companion object {
+        const val EXTRA_TAB = "tab"
+        const val EXTRA_LIST = "list"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

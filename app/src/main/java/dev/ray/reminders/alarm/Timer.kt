@@ -52,6 +52,7 @@ object Timer {
     fun setPresets(ctx: Context, list: List<TimerPreset>) {
         prefs(ctx).edit().putString("presets", dev.ray.reminders.data.ReminderStore.json.encodeToString(list)).apply()
         (presets(ctx) as MutableStateFlow).value = list
+        dev.ray.reminders.widget.TimerWidget.refresh(ctx)
     }
 
     /** "10 min", "1 h 30 min", "45 s", "2 min 30 s". */
@@ -67,6 +68,7 @@ object Timer {
     const val ACTION_CANCEL = "dev.ray.reminders.timer.CANCEL"
     const val ACTION_STOP = "dev.ray.reminders.timer.STOP"
     const val ACTION_ADD = "dev.ray.reminders.timer.ADD"
+    const val ACTION_START_PRESET = "dev.ray.reminders.timer.START_PRESET"
 
     private const val CH_RUNNING = "timer_running"
     // Live Updates need a channel that isn't low importance; this one stays silent anyway.
@@ -92,6 +94,7 @@ object Timer {
         prefs(ctx).edit().putString("label", s.label).putLong("duration", s.durationMs).putLong("endAt", s.endAt)
             .putLong("remaining", s.remaining).putBoolean("ringing", s.ringing).apply()
         (state(ctx) as MutableStateFlow).value = s
+        dev.ray.reminders.widget.TimerWidget.refresh(ctx)
     }
 
     /** Vibrate only, or sound + vibrate (remembered for every timer). */
@@ -284,6 +287,10 @@ class TimerReceiver : BroadcastReceiver() {
             Timer.ACTION_RESUME -> Timer.resume(ctx)
             Timer.ACTION_ADD -> Timer.addMinute(ctx)
             Timer.ACTION_CANCEL, Timer.ACTION_STOP -> Timer.cancel(ctx)
+            Timer.ACTION_START_PRESET -> Timer.presets(ctx).value.getOrNull(intent.getIntExtra("preset", -1))?.let {
+                if (!Timer.state(ctx).value.idle) Timer.cancel(ctx)
+                Timer.start(ctx, it.seconds * 1000L, it.name)
+            }
         }
     }
 }

@@ -47,6 +47,34 @@
             android:turnScreenOn="true"
             android:taskAffinity="dev.ray.reminders.timer" />
 
+        <activity
+            android:name=".widget.WidgetConfigActivity"
+            android:exported="true"
+            android:excludeFromRecents="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <receiver android:name=".widget.ListWidget" android:exported="true" android:label="@string/widget_list_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_list_info" />
+        </receiver>
+
+        <receiver android:name=".widget.AllListsWidget" android:exported="true" android:label="@string/widget_all_lists_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_all_lists_info" />
+        </receiver>
+
+        <receiver android:name=".widget.TimerWidget" android:exported="true" android:label="@string/widget_timer_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_timer_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.ListWidgetActions"
+            android:exported="false" />
+
         <receiver
             android:name=".alarm.ListReceiver"
             android:exported="false" />

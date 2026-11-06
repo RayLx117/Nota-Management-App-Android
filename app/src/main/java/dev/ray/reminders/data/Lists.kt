@@ -91,6 +91,7 @@ class ListsStore private constructor(private val ctx: Context, private val file:
         val updated = change(before)
         _lists.value = updated
         dev.ray.reminders.alarm.ListAlarms.sync(ctx, before, updated)
+        dev.ray.reminders.widget.ListWidgets.refreshAll(ctx)
         val tmp = File(file.parentFile, file.name + ".tmp")
         tmp.writeText(ReminderStore.json.encodeToString(updated))
         tmp.renameTo(file)

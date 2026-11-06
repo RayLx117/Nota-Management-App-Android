@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">Nota</string>
+    <string name="widget_list_name">List</string>
+    <string name="widget_list_desc">One list. Check off and clear items right from your home screen.</string>
+    <string name="widget_all_lists_name">All lists</string>
+    <string name="widget_all_lists_desc">Every list in one widget. Flip between them with the arrows.</string>
+    <string name="widget_timer_name">Timer</string>
+    <string name="widget_timer_desc">Start a preset in one tap and watch it count down.</string>
 </resources>

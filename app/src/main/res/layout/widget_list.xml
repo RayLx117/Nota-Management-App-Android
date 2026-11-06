@@ -1,0 +1,36 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="@drawable/widget_bg" android:padding="12dp">
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="40dp"
+        android:orientation="horizontal" android:gravity="center_vertical">
+        <ImageView android:id="@+id/prev" android:layout_width="32dp" android:layout_height="32dp"
+            android:padding="4dp" android:src="@drawable/widget_prev" android:visibility="gone"
+            android:contentDescription="Previous list" />
+        <LinearLayout android:id="@+id/header" android:layout_width="0dp" android:layout_height="match_parent"
+            android:layout_weight="1" android:orientation="vertical" android:gravity="center_vertical"
+            android:paddingStart="6dp">
+            <TextView android:id="@+id/kind" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="#FF8E9AB8" android:textSize="9sp" android:letterSpacing="0.15"
+                android:fontFamily="@font/outfit_semibold" />
+            <TextView android:id="@+id/title" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="#FFEEF2FA" android:textSize="18sp" android:maxLines="1" android:ellipsize="end"
+                android:fontFamily="@font/outfit_extrabold" />
+        </LinearLayout>
+        <TextView android:id="@+id/position" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:textColor="#FF8E9AB8" android:textSize="11sp" android:visibility="gone" android:paddingEnd="2dp" />
+        <ImageView android:id="@+id/clear" android:layout_width="34dp" android:layout_height="34dp"
+            android:padding="6dp" android:src="@drawable/widget_trash" android:visibility="gone"
+            android:contentDescription="Clear checked items" />
+        <ImageView android:id="@+id/next" android:layout_width="32dp" android:layout_height="32dp"
+            android:padding="4dp" android:src="@drawable/widget_next" android:visibility="gone"
+            android:contentDescription="Next list" />
+    </LinearLayout>
+
+    <FrameLayout android:layout_width="match_parent" android:layout_height="match_parent">
+        <ListView android:id="@+id/items" android:layout_width="match_parent" android:layout_height="match_parent"
+            android:divider="@null" android:dividerHeight="0dp" android:scrollbars="none" />
+        <TextView android:id="@+id/empty" android:layout_width="match_parent" android:layout_height="match_parent"
+            android:gravity="center" android:textColor="#FF8E9AB8" android:textSize="13sp" />
+    </FrameLayout>
+</LinearLayout>
