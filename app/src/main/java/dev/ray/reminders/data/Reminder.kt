@@ -48,7 +48,8 @@ data class Behavior(
     val effectiveSticky: Boolean get() = notification && sticky
     // Repeat alert was replaced by alarm snooze in the editor, so it's no longer applied.
     val effectiveNag: Boolean get() = false
-    val effectiveFullScreen: Boolean get() = alarmOn && fullScreen
+    // The Alarm box always means the full-screen alarm.
+    val effectiveFullScreen: Boolean get() = alarmOn
 
     /** Minutes between the notification appearing and the full-screen alarm. */
     // The delay counts from the notification appearing, so it needs the Notification box on.

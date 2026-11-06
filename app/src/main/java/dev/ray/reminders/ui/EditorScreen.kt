@@ -614,8 +614,6 @@ private fun AlarmSettings(r: Reminder, onChange: (Reminder) -> Unit) {
     Stepper("Snooze", Describe.minutes(b.alarmSnoozeMinutes),
         onMinus = { update(b.copy(alarmSnoozeMinutes = stepMinutes(b.alarmSnoozeMinutes, -1, min = 1))) },
         onPlus = { update(b.copy(alarmSnoozeMinutes = stepMinutes(b.alarmSnoozeMinutes, +1, min = 1))) })
-    ToggleRow("Full-screen alarm", b.fullScreen) { update(b.copy(fullScreen = it)) }
-
     // Delay counts from the notification appearing, so it needs the Notification box.
     val scope = rememberCoroutineScope()
     val shake = remember { Animatable(0f) }
@@ -623,10 +621,10 @@ private fun AlarmSettings(r: Reminder, onChange: (Reminder) -> Unit) {
     LaunchedEffect(explain) { if (explain) { delay(2500); explain = false } }
     val delayAllowed = b.notification
     ToggleRow(
-        "Delay alarm", b.fullScreenDelay && delayAllowed, indent = true, enabled = b.fullScreen && delayAllowed,
+        "Delay alarm", b.fullScreenDelay && delayAllowed, enabled = delayAllowed,
         subtitle = "Wait after the notification appears before the alarm takes over",
         modifier = Modifier.offset { IntOffset(shake.value.roundToInt(), 0) },
-        onLockedTap = if (b.fullScreen && !delayAllowed) {
+        onLockedTap = if (!delayAllowed) {
             {
                 explain = true
                 scope.launch {
@@ -641,12 +639,12 @@ private fun AlarmSettings(r: Reminder, onChange: (Reminder) -> Unit) {
     AnimatedVisibility(explain) {
         Text(
             "Notification reminder must be on for this feature",
-            color = Nota.Error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 16.dp),
+            color = Nota.Error, style = MaterialTheme.typography.bodySmall,
         )
     }
     Stepper(
         "Wait", Describe.minutes(b.fullScreenAfterMinutes.coerceAtLeast(1)), indent = true,
-        enabled = b.fullScreen && b.fullScreenDelay && delayAllowed,
+        enabled = b.fullScreenDelay && delayAllowed,
         onMinus = { update(b.copy(fullScreenAfterMinutes = stepMinutes(b.fullScreenAfterMinutes, -1, min = 1))) },
         onPlus = { update(b.copy(fullScreenAfterMinutes = stepMinutes(b.fullScreenAfterMinutes, +1, min = 1))) },
     )
