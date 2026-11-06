@@ -69,7 +69,9 @@ fun <T> LoopWheel(
     }
 
     BoxWithConstraints(modifier.fillMaxWidth().height(64.dp).background(background)) {
-        val itemWidth = 108.dp
+        // A quarter of the width each: the centre option, its two neighbours, and half of the
+        // next one on each side peeking in from the edges to show there's more to scroll.
+        val itemWidth = maxWidth / 4
         HorizontalPager(
             state = state,
             pageSize = PageSize.Fixed(itemWidth),
@@ -79,14 +81,14 @@ fun <T> LoopWheel(
             modifier = Modifier.fillMaxHeight(),
         ) { page ->
             val distance = ((page - state.currentPage) - state.currentPageOffsetFraction).absoluteValue
-            val closeness = (1f - distance.coerceAtMost(2.5f) / 2.5f)
+            val closeness = (1f - distance.coerceAtMost(3f) / 3f)
             Box(
                 Modifier.fillMaxHeight().fillMaxWidth()
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                         scope.launch { state.animateScrollToPage(page) }
                     }
                     .graphicsLayer {
-                        val scale = 0.78f + 0.22f * closeness
+                        val scale = 0.8f + 0.2f * closeness
                         scaleX = scale; scaleY = scale
                         alpha = 0.15f + 0.85f * closeness
                     },
@@ -97,7 +99,7 @@ fun <T> LoopWheel(
                     color = lerp(Nota.Sub, Nota.Text, closeness),
                     fontFamily = Nota.Outfit,
                     fontWeight = if (distance < 0.5f) FontWeight.ExtraBold else FontWeight.SemiBold,
-                    fontSize = 22.sp, maxLines = 1,
+                    fontSize = 20.sp, maxLines = 1, softWrap = false,
                 )
             }
         }
@@ -105,11 +107,11 @@ fun <T> LoopWheel(
         Dot(size = 7.dp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp))
         // Soft edges so options fade into the card.
         Box(
-            Modifier.align(Alignment.CenterStart).width(48.dp).fillMaxHeight()
+            Modifier.align(Alignment.CenterStart).width(36.dp).fillMaxHeight()
                 .background(Brush.horizontalGradient(listOf(background, Color.Transparent))),
         )
         Box(
-            Modifier.align(Alignment.CenterEnd).width(48.dp).fillMaxHeight()
+            Modifier.align(Alignment.CenterEnd).width(36.dp).fillMaxHeight()
                 .background(Brush.horizontalGradient(listOf(Color.Transparent, background))),
         )
     }
