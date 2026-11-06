@@ -18,13 +18,22 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
-      # Reuse the same debug signing key across builds. Android only installs an update
-      # over an app signed with the same key, and runners otherwise make a new key each time.
-      - name: Reuse debug signing key
+      # Reuse the same signing key across builds. Android only installs an update over an
+      # app signed with the same key, and runners otherwise make a new random key each time.
+      # The key lives in the Actions cache, never in the repo.
+      - name: Restore signing key
         uses: actions/cache@v4
         with:
-          path: ~/.android/debug.keystore
-          key: debug-keystore-v1
+          path: ${{ runner.temp }}/nota-signing.keystore
+          key: nota-signing-keystore-v1
+      - name: Create signing key if missing
+        run: |
+          KS="$RUNNER_TEMP/nota-signing.keystore"
+          if [ ! -f "$KS" ]; then
+            keytool -genkeypair -keystore "$KS" -storepass android -keypass android \
+              -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Nota"
+          fi
+          echo "NOTA_KEYSTORE=$KS" >> "$GITHUB_ENV"
       - name: Unit tests
         run: ./gradlew testDebugUnitTest
       - name: Build debug APK

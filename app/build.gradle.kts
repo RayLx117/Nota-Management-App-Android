@@ -17,6 +17,19 @@ android {
         versionName = "1.0"
     }
 
+    // CI passes a persistent key (see .github/workflows/build.yml) so every build can update
+    // the previous one. Local builds keep the normal debug key.
+    System.getenv("NOTA_KEYSTORE")?.let { keystore ->
+        signingConfigs {
+            getByName("debug") {
+                storeFile = file(keystore)
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
