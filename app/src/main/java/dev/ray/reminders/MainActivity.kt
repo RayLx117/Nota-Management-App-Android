@@ -110,7 +110,7 @@ private fun App(openTimer: Int) {
     fun edit(kind: Kind, id: Int) { editingKind = kind; editingId = id }
 
     Column(Modifier.fillMaxSize().background(Nota.Bg)) {
-        HorizontalPager(pager, modifier = Modifier.weight(1f), beyondViewportPageCount = 1) { page ->
+        HorizontalPager(pager, modifier = Modifier.weight(1f), beyondViewportPageCount = 1, userScrollEnabled = false) { page ->
             when (Tab.entries[page]) {
                 Tab.TIMER -> dev.ray.reminders.ui.TimerScreen()
                 Tab.ALARMS -> AlarmsScreen(
@@ -121,7 +121,7 @@ private fun App(openTimer: Int) {
                     items.filter { it.kind == Kind.REMINDER },
                     onAdd = { edit(Kind.REMINDER, NEW) }, onEdit = { edit(Kind.REMINDER, it) },
                 )
-                Tab.LISTS -> ComingSoonScreen("Lists", "Checklists will live here.")
+                Tab.LISTS -> dev.ray.reminders.ui.ListsScreen()
             }
         }
         // Bottom bar: tap to jump, or swipe between screens.
