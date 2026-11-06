@@ -97,15 +97,35 @@ fun TimerScreen(visible: Boolean) {
     val pages = rememberPagerState { 2 }
     LaunchedEffect(visible) { if (!visible) pages.scrollToPage(0) }
     Column(Modifier.fillMaxSize().background(Nota.Bg).statusBarsPadding()) {
-        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            PageHeader(if (pages.currentPage == 0) "Timer" else "Stopwatch", Modifier.weight(1f))
-            // Which of the two pages you're on.
-            repeat(2) { i ->
-                Box(
-                    Modifier.padding(start = 6.dp).size(if (pages.currentPage == i) 8.dp else 6.dp).clip(CircleShape)
-                        .background(if (pages.currentPage == i) Nota.Mint else Nota.Outline),
-                )
+        // "Timer  • •  Stopwatch": the page you're on is bright, the other greyed; follows the swipe.
+        val scope = rememberCoroutineScope()
+        val progress = (pages.currentPage + pages.currentPageOffsetFraction).coerceIn(0f, 1f)
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Timer", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp,
+                color = lerp(Nota.Text, Nota.Outline, progress),
+                modifier = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                    scope.launch { pages.animateScrollToPage(0) }
+                },
+            )
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)) {
+                repeat(2) { i ->
+                    val on = if (i == 0) 1f - progress else progress
+                    Box(
+                        Modifier.size(6.dp + 2.dp * on).clip(CircleShape).background(lerp(Nota.Outline, Nota.Mint, on)),
+                    )
+                }
             }
+            Text(
+                "Stopwatch", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp,
+                color = lerp(Nota.Outline, Nota.Text, progress),
+                modifier = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                    scope.launch { pages.animateScrollToPage(1) }
+                },
+            )
         }
         HorizontalPager(pages, modifier = Modifier.weight(1f)) { page ->
             Box(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
