@@ -112,7 +112,7 @@ private fun App(openTimer: Int) {
     Column(Modifier.fillMaxSize().background(Nota.Bg)) {
         HorizontalPager(pager, modifier = Modifier.weight(1f), beyondViewportPageCount = 1, userScrollEnabled = false) { page ->
             when (Tab.entries[page]) {
-                Tab.TIMER -> dev.ray.reminders.ui.TimerScreen()
+                Tab.TIMER -> dev.ray.reminders.ui.TimerScreen(visible = pager.currentPage == Tab.TIMER.ordinal)
                 Tab.ALARMS -> AlarmsScreen(
                     items.filter { it.kind == Kind.ALARM },
                     onAdd = { edit(Kind.ALARM, NEW) }, onEdit = { edit(Kind.ALARM, it) },

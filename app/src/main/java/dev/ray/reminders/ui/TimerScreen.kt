@@ -64,24 +64,107 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.ray.reminders.alarm.Stopwatch
 import dev.ray.reminders.alarm.Timer
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.shape.CircleShape
 import dev.ray.reminders.data.AlertStyle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
 
-/** The Timer tab: set it with three wheels, then watch the ring count down. */
+/**
+ * The Timer tab: the timer, with the stopwatch one swipe to the right.
+ * It always comes back to the timer when you leave the tab.
+ */
 @Composable
-fun TimerScreen() {
+fun TimerScreen(visible: Boolean) {
+    val pages = rememberPagerState { 2 }
+    LaunchedEffect(visible) { if (!visible) pages.scrollToPage(0) }
+    Column(Modifier.fillMaxSize().background(Nota.Bg).statusBarsPadding()) {
+        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            PageHeader(if (pages.currentPage == 0) "Timer" else "Stopwatch", Modifier.weight(1f))
+            // Which of the two pages you're on.
+            repeat(2) { i ->
+                Box(
+                    Modifier.padding(start = 6.dp).size(if (pages.currentPage == i) 8.dp else 6.dp).clip(CircleShape)
+                        .background(if (pages.currentPage == i) Nota.Mint else Nota.Outline),
+                )
+            }
+        }
+        HorizontalPager(pages, modifier = Modifier.weight(1f)) { page ->
+            Box(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                if (page == 0) TimerPage() else StopwatchPage()
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimerPage() {
     val ctx = LocalContext.current
     val state by Timer.state(ctx).collectAsState()
-    Column(
-        Modifier.fillMaxSize().background(Nota.Bg).statusBarsPadding().padding(horizontal = 16.dp),
-    ) {
-        PageHeader("Timer")
-        AnimatedContent(state.idle, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "timer") { idle ->
-            if (idle) TimerSetup() else TimerRunning()
+    AnimatedContent(state.idle, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "timer") { idle ->
+        if (idle) TimerSetup() else TimerRunning()
+    }
+}
+
+@Composable
+private fun StopwatchPage() {
+    val ctx = LocalContext.current
+    val sw by Stopwatch.state(ctx).collectAsState()
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(sw.running) {
+        while (sw.running) { now = System.currentTimeMillis(); delay(16) }
+        now = System.currentTimeMillis()
+    }
+    val elapsed = sw.elapsed(now)
+    // Each lap's own time, newest first; best and worst get coloured once there are a few.
+    val splits = sw.laps.mapIndexed { i, total -> total - (if (i == 0) 0 else sw.laps[i - 1]) }
+    val best = if (splits.size >= 3) splits.min() else null
+    val worst = if (splits.size >= 3) splits.max() else null
+
+    Column(Modifier.fillMaxSize().padding(bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.fillMaxWidth().height(170.dp), contentAlignment = Alignment.Center) {
+            Text(
+                Stopwatch.format(elapsed), fontFamily = Nota.Mono, fontWeight = FontWeight.SemiBold,
+                fontSize = if (elapsed >= 3_600_000) 46.sp else 60.sp,
+                color = if (sw.running) Nota.Text else if (elapsed > 0) Nota.Sub else Nota.Text,
+            )
         }
+        LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
+            if (sw.running && sw.laps.isNotEmpty()) item {
+                LapRow(sw.laps.size + 1, elapsed - sw.laps.last(), elapsed, Nota.Text)
+            }
+            items(splits.indices.reversed().toList()) { i ->
+                val color = when (splits[i]) { best -> Nota.Mint; worst -> Nota.Error; else -> Nota.Sub }
+                LapRow(i + 1, splits[i], sw.laps[i], color)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            when {
+                sw.running -> SoftButton("Lap", onClick = { Stopwatch.lap(ctx) }, modifier = Modifier.weight(1f))
+                elapsed > 0 -> SoftButton("Reset", onClick = { Stopwatch.reset(ctx) }, modifier = Modifier.weight(1f))
+                else -> SoftButton("Lap", onClick = {}, modifier = Modifier.weight(1f).alpha(0.4f))
+            }
+            if (sw.running) SoftButton("Stop", onClick = { Stopwatch.stop(ctx) }, modifier = Modifier.weight(1f), color = Nota.Error)
+            else PrimaryButton(if (elapsed > 0) "Resume" else "Start", onClick = { Stopwatch.start(ctx) }, modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun LapRow(n: Int, split: Long, total: Long, color: Color) {
+    Column {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Lap $n", fontFamily = Nota.Outfit, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = color, modifier = Modifier.weight(1f))
+            Text(Stopwatch.format(split), fontFamily = Nota.Mono, fontSize = 16.sp, color = color, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+            Text(Stopwatch.format(total), fontFamily = Nota.Mono, fontSize = 16.sp, color = Nota.Sub, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+        }
+        androidx.compose.material3.HorizontalDivider(color = Nota.Line)
     }
 }
 
