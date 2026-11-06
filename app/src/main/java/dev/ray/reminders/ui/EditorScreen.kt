@@ -105,7 +105,11 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
 
     fun behavior(change: Behavior.() -> Behavior) { r = r.copy(behavior = r.behavior.change()) }
     fun save(): Reminder {
-        val cleaned = r.copy(title = r.title.trim().ifEmpty { "Reminder" }, notes = r.notes.trim())
+        var cleaned = r.copy(title = r.title.trim().ifEmpty { "Reminder" }, notes = r.notes.trim())
+        // Weekly has no start date picker: make sure it starts no later than today.
+        if (cleaned.repeat == RepeatType.WEEKLY) {
+            cleaned = cleaned.copy(startEpochDay = minOf(cleaned.startEpochDay, LocalDate.now().toEpochDay()))
+        }
         ReminderEngine.save(ctx, cleaned)
         return cleaned
     }
@@ -150,7 +154,10 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
                 if (days.isNotEmpty()) r = r.copy(weekdays = days)
             }
         }
-        ValueRow(if (r.repeat == RepeatType.ONCE) "Date" else "Starts", Describe.date(r.startEpochDay)) { showDate = true }
+        // Weekly reminders are anchored by the chosen days, so they don't need a start date.
+        if (r.repeat != RepeatType.WEEKLY) {
+            ValueRow(if (r.repeat == RepeatType.ONCE) "Date" else "Starts", Describe.date(r.startEpochDay)) { showDate = true }
+        }
         ValueRow("Time", Describe.time(r)) { showTime = true }
 
         // ---------------------------------------------------------------- behaviour
