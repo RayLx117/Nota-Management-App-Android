@@ -199,7 +199,7 @@ private fun TimerSetup() {
                     .clip(RoundedCornerShape(16.dp)).background(Nota.Raised),
             )
             Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                NumberWheel(24, h, { h = it }, "h", Modifier.weight(1f))
+                NumberWheel(100, h, { h = it }, "h", Modifier.weight(1f))
                 Colon()
                 NumberWheel(60, m, { m = it }, "m", Modifier.weight(1f))
                 Colon()
