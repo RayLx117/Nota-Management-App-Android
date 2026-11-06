@@ -54,6 +54,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -161,16 +162,19 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
         }
         ToggleRow("Pin until Done", r.behavior.sticky) { behavior { copy(sticky = it) } }
         ToggleRow("Repeat alert", r.behavior.nag) { behavior { copy(nag = it) } }
-        if (r.behavior.nag) Stepper("Every", Describe.minutes(r.behavior.nagEveryMinutes), indent = true,
+        Stepper("Every", Describe.minutes(r.behavior.nagEveryMinutes), indent = true, enabled = r.behavior.nag,
             onMinus = { behavior { copy(nagEveryMinutes = stepMinutes(nagEveryMinutes, -1, min = 1)) } },
             onPlus = { behavior { copy(nagEveryMinutes = stepMinutes(nagEveryMinutes, +1, min = 1)) } })
         ToggleRow("Full-screen alarm", r.behavior.fullScreen) { behavior { copy(fullScreen = it) } }
-        if (r.behavior.fullScreen) Stepper(
-            "After",
-            if (r.behavior.fullScreenAfterMinutes == 0) "Right away" else Describe.minutes(r.behavior.fullScreenAfterMinutes),
-            indent = true,
-            onMinus = { behavior { copy(fullScreenAfterMinutes = stepMinutes(fullScreenAfterMinutes, -1, min = 0)) } },
-            onPlus = { behavior { copy(fullScreenAfterMinutes = stepMinutes(fullScreenAfterMinutes, +1, min = 0)) } },
+        ToggleRow(
+            "Delay alarm", r.behavior.fullScreenDelay, indent = true, enabled = r.behavior.fullScreen,
+            subtitle = "Wait after the notification appears before the alarm takes over",
+        ) { behavior { copy(fullScreenDelay = it) } }
+        Stepper(
+            "Wait", Describe.minutes(r.behavior.fullScreenAfterMinutes.coerceAtLeast(1)), indent = true,
+            enabled = r.behavior.fullScreen && r.behavior.fullScreenDelay,
+            onMinus = { behavior { copy(fullScreenAfterMinutes = stepMinutes(fullScreenAfterMinutes, -1, min = 1)) } },
+            onPlus = { behavior { copy(fullScreenAfterMinutes = stepMinutes(fullScreenAfterMinutes, +1, min = 1)) } },
         )
         Stepper("Snooze", Describe.minutes(r.behavior.snoozeMinutes),
             onMinus = { behavior { copy(snoozeMinutes = stepMinutes(snoozeMinutes, -1, min = 1)) } },
@@ -180,7 +184,7 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
 
         PrimaryButton("Save", onClick = { save(); onClose() }, modifier = Modifier.fillMaxWidth())
         SoftButton(
-            "Save and test", modifier = Modifier.fillMaxWidth(),
+            "Save and start", modifier = Modifier.fillMaxWidth(),
             onClick = { val saved = save(); ReminderEngine.testNow(ctx, saved.id); onClose() },
         )
         Spacer(Modifier.height(16.dp))
@@ -307,13 +311,21 @@ private fun ChipRow(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun ToggleRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun ToggleRow(
+    title: String, checked: Boolean, indent: Boolean = false, enabled: Boolean = true, subtitle: String? = null,
+    onChange: (Boolean) -> Unit,
+) {
     Row(
-        Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(vertical = 2.dp),
+        Modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.35f)
+            .clickable(enabled = enabled) { onChange(!checked) }
+            .padding(start = if (indent) 16.dp else 0.dp, top = 2.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, style = MaterialTheme.typography.bodyLarge, color = Nota.Text, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onChange, colors = notaSwitchColors())
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = if (indent) Nota.Sub else Nota.Text)
+            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Nota.Sub)
+        }
+        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled, colors = notaSwitchColors())
     }
 }
 
@@ -330,25 +342,29 @@ private fun ValueRow(label: String, value: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun Stepper(label: String, valueText: String, onMinus: () -> Unit, onPlus: () -> Unit, indent: Boolean = false) {
+private fun Stepper(
+    label: String, valueText: String, onMinus: () -> Unit, onPlus: () -> Unit,
+    indent: Boolean = false, enabled: Boolean = true,
+) {
+    // Disabled steppers stay visible but greyed out until their option is switched on.
     Row(
-        Modifier.fillMaxWidth().padding(start = if (indent) 16.dp else 0.dp),
+        Modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.35f).padding(start = if (indent) 16.dp else 0.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, style = MaterialTheme.typography.bodyLarge, color = if (indent) Nota.Sub else Nota.Text, modifier = Modifier.weight(1f))
-        StepButton("−", onMinus)
+        StepButton("−", onMinus, enabled)
         Text(
             valueText, modifier = Modifier.width(96.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             fontFamily = Nota.Outfit, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Nota.Text,
         )
-        StepButton("+", onPlus)
+        StepButton("+", onPlus, enabled)
     }
 }
 
 @Composable
-private fun StepButton(text: String, onClick: () -> Unit) {
+private fun StepButton(text: String, onClick: () -> Unit, enabled: Boolean) {
     Box(
-        Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Nota.Raised).clickable(onClick = onClick),
+        Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Nota.Raised).clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Text(text, color = Nota.Text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold) }
 }

@@ -22,12 +22,16 @@ data class Behavior(
     /** Alert again every [nagEveryMinutes] until Done is tapped. */
     val nag: Boolean = false,
     val nagEveryMinutes: Int = 15,
-    /** Show a full-screen alarm [fullScreenAfterMinutes] after the reminder first went off. */
+    /** Show a full-screen alarm when the reminder goes off, or [fullScreenAfterMinutes] later if [fullScreenDelay]. */
     val fullScreen: Boolean = false,
+    val fullScreenDelay: Boolean = true,
     val fullScreenAfterMinutes: Int = 60,
     /** Length of the Snooze button. */
     val snoozeMinutes: Int = 10,
-)
+) {
+    /** Minutes between the notification appearing and the full-screen alarm. */
+    val fullScreenDelayMinutes: Int get() = if (fullScreenDelay) fullScreenAfterMinutes.coerceAtLeast(1) else 0
+}
 
 @Serializable
 data class Reminder(

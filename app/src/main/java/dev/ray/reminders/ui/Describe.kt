@@ -69,8 +69,8 @@ object Describe {
             )
             if (b.nag) add("Until you tap Done, it alerts you again every ${minutes(b.nagEveryMinutes)}.")
             if (b.fullScreen) add(
-                if (b.fullScreenAfterMinutes == 0) "A full-screen alarm also opens right away, ringing until you tap Done or Snooze."
-                else "If it's still not done after ${minutes(b.fullScreenAfterMinutes)}, a full-screen alarm takes over, ringing until you tap Done or Snooze.",
+                if (b.fullScreenDelayMinutes == 0) "A full-screen alarm also opens right away, ringing until you tap Done or Snooze."
+                else "If it's still not done after ${minutes(b.fullScreenDelayMinutes)}, a full-screen alarm takes over, ringing until you tap Done or Snooze.",
             )
             add("Snooze hides it for ${minutes(b.snoozeMinutes)}.")
         }

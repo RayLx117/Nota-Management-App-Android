@@ -165,7 +165,7 @@ object ReminderEngine {
         val since = r.activeSince ?: return
         if (r.behavior.nag) setAlarm(ctx, ACTION_NAG, r.id, now() + nagInterval(r))
         if (r.behavior.fullScreen && r.fullScreenShownAt == null) {
-            val at = since + r.behavior.fullScreenAfterMinutes.coerceAtLeast(0) * MINUTE
+            val at = since + r.behavior.fullScreenDelayMinutes * MINUTE
             setAlarm(ctx, ACTION_FULLSCREEN, r.id, maxOf(at, now() + 1_000))
         }
     }
