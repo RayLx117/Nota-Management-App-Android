@@ -28,6 +28,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -85,12 +87,25 @@ fun ListScreen(reminders: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Un
             }
             items(upcoming, key = { it.id }) { r -> UpcomingRow(r, onClick = { onEdit(r.id) }) }
         }
-        PrimaryButton(
-            "New reminder", onClick = onAdd,
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 16.dp),
-            height = 56.dp,
+        AddButton(
+            onClick = onAdd,
+            modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(20.dp),
         )
+    }
+}
+
+/** Round mint-to-cyan "+" button for a new reminder. */
+@Composable
+private fun AddButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier.size(62.dp)
+            .shadow(14.dp, CircleShape, ambientColor = Nota.Cyan, spotColor = Nota.Cyan)
+            .clip(CircleShape)
+            .background(Brush.linearGradient(listOf(Nota.Mint, Nota.Cyan)))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("+", color = Nota.Ink, fontFamily = Nota.Outfit, fontSize = 34.sp, fontWeight = FontWeight.Normal)
     }
 }
 
