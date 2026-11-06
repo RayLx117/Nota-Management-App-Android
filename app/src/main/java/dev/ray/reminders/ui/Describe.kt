@@ -1,6 +1,7 @@
 package dev.ray.reminders.ui
 
 import dev.ray.reminders.data.AlertStyle
+import dev.ray.reminders.data.ImageStyle
 import dev.ray.reminders.data.Reminder
 import dev.ray.reminders.data.RepeatType
 import java.time.DayOfWeek
@@ -58,7 +59,10 @@ object Describe {
         }
         return buildList {
             add(first)
-            if (r.imagePath != null) add("It shows your picture: a thumbnail, and a full-width banner when you expand it.")
+            if (r.imagePath != null) add(
+                if (r.imageStyle == ImageStyle.BANNER) "Your picture runs as a strip across the notification, with the title on top."
+                else "It shows your picture: a thumbnail, and a full-width image when you expand it.",
+            )
             add(
                 if (b.sticky) "It stays in your notification bar until you tap Done. Swiping it away just brings it back."
                 else "You can swipe it away like a normal notification.",

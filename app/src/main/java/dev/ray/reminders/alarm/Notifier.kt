@@ -12,7 +12,10 @@ import android.media.RingtoneManager
 import dev.ray.reminders.MainActivity
 import dev.ray.reminders.R
 import dev.ray.reminders.data.AlertStyle
+import dev.ray.reminders.data.ImageStyle
 import dev.ray.reminders.data.Images
+import android.view.View
+import android.widget.RemoteViews
 import dev.ray.reminders.data.Reminder
 import dev.ray.reminders.ui.AlarmActivity
 
@@ -103,7 +106,24 @@ object Notifier {
             .addAction(snooze)
 
         val picture = r.imagePath?.let(Images::load)
-        if (picture != null) {
+        if (picture != null && r.imageStyle == ImageStyle.BANNER) {
+            // A picture strip across the notification, with the title on top of it.
+            val strip = Images.banner(picture)
+            val collapsed = RemoteViews(ctx.packageName, R.layout.notification_banner_collapsed).apply {
+                setImageViewBitmap(R.id.banner, strip)
+                setTextViewText(R.id.title, r.title)
+            }
+            val expanded = RemoteViews(ctx.packageName, R.layout.notification_banner_expanded).apply {
+                setImageViewBitmap(R.id.banner, strip)
+                setTextViewText(R.id.title, r.title)
+                setTextViewText(R.id.notes, text)
+                setViewVisibility(R.id.notes, if (text.isBlank()) View.GONE else View.VISIBLE)
+            }
+            builder.setStyle(Notification.DecoratedCustomViewStyle())
+                .setCustomContentView(collapsed)
+                .setCustomHeadsUpContentView(collapsed)
+                .setCustomBigContentView(expanded)
+        } else if (picture != null) {
             // Thumbnail on the right when collapsed, full-width banner when expanded.
             builder.setStyle(
                 Notification.BigPictureStyle()

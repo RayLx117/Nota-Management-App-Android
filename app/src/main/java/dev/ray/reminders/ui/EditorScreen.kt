@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import dev.ray.reminders.data.ImageStyle
 import dev.ray.reminders.data.Images
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -133,14 +134,12 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
         ) {
             OutlinedTextField(
                 value = r.title, onValueChange = { r = r.copy(title = it) },
-                label = { Text("What should I remind you about?") },
-                placeholder = { Text("Take supplements") },
+                label = { Text("Title") },
                 singleLine = true, modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
                 value = r.notes, onValueChange = { r = r.copy(notes = it) },
                 label = { Text("Notes (optional)") },
-                placeholder = { Text("Vitamin D, magnesium, omega-3") },
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -149,6 +148,26 @@ fun EditorScreen(existing: Reminder?, newId: () -> Int, onClose: () -> Unit) {
                 onPicked = { r = r.copy(imagePath = it) },
                 onRemove = { r = r.copy(imagePath = null) },
             )
+            if (r.imagePath != null) {
+                Text("Show the picture as", style = MaterialTheme.typography.bodyMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = r.imageStyle == ImageStyle.PICTURE,
+                        onClick = { r = r.copy(imageStyle = ImageStyle.PICTURE) },
+                        label = { Text("Picture") },
+                    )
+                    FilterChip(
+                        selected = r.imageStyle == ImageStyle.BANNER,
+                        onClick = { r = r.copy(imageStyle = ImageStyle.BANNER) },
+                        label = { Text("Banner strip") },
+                    )
+                }
+                Text(
+                    if (r.imageStyle == ImageStyle.BANNER) "A strip across the notification, even when collapsed."
+                    else "A thumbnail on the side, and a big image when you expand the notification.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             // ------------------------------------------------------------- schedule
             SectionTitle("When")

@@ -5,6 +5,10 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class RepeatType { ONCE, DAILY, WEEKLY, MONTHLY, YEARLY }
 
+/** How the reminder's picture appears in the notification. */
+@Serializable
+enum class ImageStyle { PICTURE, BANNER }
+
 @Serializable
 enum class AlertStyle { SOUND_AND_VIBRATE, VIBRATE_ONLY, SILENT }
 
@@ -43,6 +47,7 @@ data class Reminder(
     val behavior: Behavior = Behavior(),
     /** Optional picture shown in the notification and on the full-screen alarm (a file in app storage). */
     val imagePath: String? = null,
+    val imageStyle: ImageStyle = ImageStyle.PICTURE,
 
     // ---- runtime state, managed by ReminderEngine ----
     /** Next scheduled occurrence (epoch millis), or null if none. */

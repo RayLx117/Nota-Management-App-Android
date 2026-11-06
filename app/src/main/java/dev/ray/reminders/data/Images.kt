@@ -28,6 +28,15 @@ object Images {
         null
     }
 
+    /** A 3:1 centre-cropped strip, kept small so it fits in a notification's custom view. */
+    fun banner(src: Bitmap): Bitmap {
+        val ratio = 3f
+        val (cw, ch) = if (src.width.toFloat() / src.height > ratio) (src.height * ratio).toInt() to src.height
+        else src.width to (src.width / ratio).toInt()
+        val cropped = Bitmap.createBitmap(src, (src.width - cw) / 2, (src.height - ch) / 2, cw, ch)
+        return Bitmap.createScaledBitmap(cropped, 720, 240, true).copy(Bitmap.Config.RGB_565, false)
+    }
+
     fun load(path: String): Bitmap? = BitmapFactory.decodeFile(path)
 
     fun delete(path: String) {
