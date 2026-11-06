@@ -516,7 +516,7 @@ private fun RepeatType.unit(n: Int): String {
     return if (n == 1) base else base + "s"
 }
 
-private val AlertStyle.label: String
+val AlertStyle.label: String
     get() = when (this) {
         AlertStyle.SOUND_AND_VIBRATE -> "Sound + vibrate"
         AlertStyle.VIBRATE_ONLY -> "Vibrate only"
@@ -574,7 +574,7 @@ private fun ReminderDelivery(r: Reminder, onChange: (Reminder) -> Unit) {
 private fun AlarmSettings(r: Reminder, onChange: (Reminder) -> Unit) {
     val b = r.behavior
     fun update(nb: Behavior) = onChange(r.copy(behavior = nb))
-    SoundPicker(b.alertStyle) { update(b.copy(alertStyle = it)) }
+    SoundPicker(b.alertStyle, onPick = { update(b.copy(alertStyle = it)) })
     Stepper("Snooze", Describe.minutes(b.alarmSnoozeMinutes),
         onMinus = { update(b.copy(alarmSnoozeMinutes = stepMinutes(b.alarmSnoozeMinutes, -1, min = 1))) },
         onPlus = { update(b.copy(alarmSnoozeMinutes = stepMinutes(b.alarmSnoozeMinutes, +1, min = 1))) })
@@ -615,7 +615,11 @@ private fun AlarmSettings(r: Reminder, onChange: (Reminder) -> Unit) {
 }
 
 @Composable
-private fun SoundPicker(current: AlertStyle, onPick: (AlertStyle) -> Unit) {
+fun SoundPicker(
+    current: AlertStyle,
+    options: List<AlertStyle> = listOf(AlertStyle.SOUND_AND_VIBRATE, AlertStyle.SOUND_ONLY, AlertStyle.VIBRATE_ONLY),
+    onPick: (AlertStyle) -> Unit,
+) {
     var menu by remember { mutableStateOf(false) }
     // Sound type: no title, just the choice and a green arrow. Opening it extends the same
     // grey box downward to reveal the other options, rather than a separate popup.
@@ -632,7 +636,7 @@ private fun SoundPicker(current: AlertStyle, onPick: (AlertStyle) -> Unit) {
             )
         }
         if (menu) {
-            listOf(AlertStyle.SOUND_AND_VIBRATE, AlertStyle.SOUND_ONLY, AlertStyle.VIBRATE_ONLY)
+            options
                 .filter { it != current }
                 .forEach { style ->
                     HorizontalDivider(color = Nota.Outline.copy(alpha = 0.5f), modifier = Modifier.padding(horizontal = 16.dp))
@@ -655,9 +659,9 @@ private fun AlarmOnlySettings(r: Reminder, onChange: (Reminder) -> Unit) {
         Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Nota.Shelf).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        SoundPicker(if (b.alertStyle == AlertStyle.SILENT) AlertStyle.SOUND_AND_VIBRATE else b.alertStyle) {
+        SoundPicker(if (b.alertStyle == AlertStyle.SILENT) AlertStyle.SOUND_AND_VIBRATE else b.alertStyle, onPick = {
             update(b.copy(alertStyle = it))
-        }
+        })
         Stepper("Snooze", Describe.minutes(b.alarmSnoozeMinutes),
             onMinus = { update(b.copy(alarmSnoozeMinutes = stepMinutes(b.alarmSnoozeMinutes, -1, min = 1))) },
             onPlus = { update(b.copy(alarmSnoozeMinutes = stepMinutes(b.alarmSnoozeMinutes, +1, min = 1))) })

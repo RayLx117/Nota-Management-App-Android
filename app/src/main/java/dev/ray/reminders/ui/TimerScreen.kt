@@ -65,6 +65,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ray.reminders.alarm.Timer
+import dev.ray.reminders.data.AlertStyle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
@@ -94,7 +95,7 @@ private fun TimerSetup() {
     var label by rememberSaveable { mutableStateOf("") }
     val total = (h * 3600L + m * 60L + s) * 1000L
 
-    Column(Modifier.fillMaxSize().padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+    Column(Modifier.fillMaxSize().padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         OutlinedTextField(
             value = label, onValueChange = { label = it }, singleLine = true,
             placeholder = { Text("Name this timer", color = Nota.Sub) },
@@ -132,6 +133,13 @@ private fun TimerSetup() {
             )
         }
 
+        var vibrateOnly by remember { mutableStateOf(Timer.vibrateOnly(ctx)) }
+        SoundPicker(
+            if (vibrateOnly) AlertStyle.VIBRATE_ONLY else AlertStyle.SOUND_AND_VIBRATE,
+            options = listOf(AlertStyle.SOUND_AND_VIBRATE, AlertStyle.VIBRATE_ONLY),
+            onPick = { vibrateOnly = it == AlertStyle.VIBRATE_ONLY; Timer.setVibrateOnly(ctx, vibrateOnly) },
+        )
+
         Spacer(Modifier.weight(1f))
         PrimaryButton(
             "Start", onClick = { Timer.start(ctx, total, label) },
@@ -146,7 +154,7 @@ private fun Colon() {
 }
 
 private val ITEM_HEIGHT = 60.dp
-private val WHEEL_HEIGHT = 300.dp
+private val WHEEL_HEIGHT = 260.dp
 
 /** An endless vertical number wheel (0 until [count]); the middle row is the value. */
 @Composable

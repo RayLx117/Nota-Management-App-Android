@@ -45,6 +45,7 @@ object Timer {
 
     private const val CH_RUNNING = "timer_running"
     private const val CH_DONE = "timer_done"
+    private const val CH_DONE_VIBRATE = "timer_done_vibrate"
     private const val NOTIF_ID = 2_000_000
 
     private var flow: MutableStateFlow<TimerState>? = null
@@ -65,6 +66,10 @@ object Timer {
             .putLong("remaining", s.remaining).putBoolean("ringing", s.ringing).apply()
         (state(ctx) as MutableStateFlow).value = s
     }
+
+    /** Vibrate only, or sound + vibrate (remembered for every timer). */
+    fun vibrateOnly(ctx: Context) = prefs(ctx).getBoolean("vibrateOnly", false)
+    fun setVibrateOnly(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("vibrateOnly", on).apply()
 
     /** The wheels remember the last time you set. */
     fun lastDuration(ctx: Context) = prefs(ctx).getLong("last", 5 * 60_000L)
@@ -163,6 +168,12 @@ object Timer {
                         AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build(),
                     )
                     enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 800, 600, 800, 600)
+                },
+                NotificationChannel(CH_DONE_VIBRATE, "Timer: time's up (vibrate only)", NotificationManager.IMPORTANCE_HIGH).apply {
+                    setSound(null, null)
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 800, 600, 800, 600)
                 },
             ),
         )
@@ -205,7 +216,7 @@ object Timer {
             ctx, NOTIF_ID + 1, Intent(ctx, TimerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val n = Notification.Builder(ctx, CH_DONE)
+        val n = Notification.Builder(ctx, if (vibrateOnly(ctx)) CH_DONE_VIBRATE else CH_DONE)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Time's up")
             .setContentText(s.label.ifBlank { format(s.durationMs) + " timer" })
