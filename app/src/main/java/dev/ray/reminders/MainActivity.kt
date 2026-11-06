@@ -98,24 +98,29 @@ private fun App(openTimer: Int, openLists: Int) {
     // What's open in the editor: null = nothing, otherwise (kind, id or NEW).
     var editingId by rememberSaveable { mutableStateOf<Int?>(null) }
     var editingKind by rememberSaveable { mutableStateOf(Kind.REMINDER) }
+    // Calendar open for alarms or reminders (null = closed), and what a new item from it starts with.
+    var calendarKind by rememberSaveable { mutableStateOf<Kind?>(null) }
+    var prefill by remember { mutableStateOf<dev.ray.reminders.ui.Prefill?>(null) }
     val pager = rememberPagerState(initialPage = Tab.REMINDERS.ordinal) { Tab.entries.size }
     val scope = rememberCoroutineScope()
     androidx.compose.runtime.LaunchedEffect(openTimer) {
-        if (openTimer > 0) { editingId = null; pager.scrollToPage(Tab.TIMER.ordinal) }
+        if (openTimer > 0) { editingId = null; calendarKind = null; pager.scrollToPage(Tab.TIMER.ordinal) }
     }
     androidx.compose.runtime.LaunchedEffect(openLists) {
-        if (openLists > 0) { editingId = null; pager.scrollToPage(Tab.LISTS.ordinal) }
+        if (openLists > 0) { editingId = null; calendarKind = null; pager.scrollToPage(Tab.LISTS.ordinal) }
     }
 
     fun edit(kind: Kind, id: Int) { editingKind = kind; editingId = id }
 
     // The editor rises in gently over the lists, and sinks back out when closed.
+    // Screens stack: tabs (0) < calendar (1) < editor (2). Deeper ones rise in; going back sinks them.
     androidx.compose.animation.AnimatedContent(
-        editingId,
-        contentKey = { it != null },
+        Triple(editingId, calendarKind, editingKind),
+        contentKey = { if (it.first != null) 2 else if (it.second != null) 1 else 0 },
         transitionSpec = {
             val ease = androidx.compose.animation.core.FastOutSlowInEasing
-            if (targetState != null) {
+            fun depth(t: Triple<Int?, Kind?, Kind>) = if (t.first != null) 2 else if (t.second != null) 1 else 0
+            if (depth(targetState) > depth(initialState)) {
                 (androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(240, easing = ease)) +
                     androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(320, easing = ease)) { it / 10 } +
                     androidx.compose.animation.scaleIn(androidx.compose.animation.core.tween(320, easing = ease), initialScale = 0.98f)) togetherWith
@@ -129,14 +134,24 @@ private fun App(openTimer: Int, openLists: Int) {
         },
         modifier = Modifier.fillMaxSize().background(Nota.Bg),
         label = "editor",
-    ) { current ->
+    ) { (current, calendar, kind) ->
     if (current != null) {
-        BackHandler { editingId = null }
+        BackHandler { editingId = null; prefill = null }
         EditorScreen(
             existing = items.firstOrNull { it.id == current },
-            kind = editingKind,
+            kind = kind,
             newId = { store.newId() },
-            onClose = { editingId = null },
+            onClose = { editingId = null; prefill = null },
+            prefill = prefill,
+        )
+    } else if (calendar != null) {
+        BackHandler { calendarKind = null }
+        dev.ray.reminders.ui.CalendarScreen(
+            kind = calendar,
+            items = items.filter { it.kind == calendar },
+            onBack = { calendarKind = null },
+            onCreate = { prefill = it; edit(calendar, NEW) },
+            onEdit = { edit(calendar, it) },
         )
     } else
     Column(Modifier.fillMaxSize().background(Nota.Bg)) {
@@ -146,10 +161,12 @@ private fun App(openTimer: Int, openLists: Int) {
                 Tab.ALARMS -> AlarmsScreen(
                     items.filter { it.kind == Kind.ALARM },
                     onAdd = { edit(Kind.ALARM, NEW) }, onEdit = { edit(Kind.ALARM, it) },
+                    onCalendar = { calendarKind = Kind.ALARM },
                 )
                 Tab.REMINDERS -> ListScreen(
                     items.filter { it.kind == Kind.REMINDER },
                     onAdd = { edit(Kind.REMINDER, NEW) }, onEdit = { edit(Kind.REMINDER, it) },
+                    onCalendar = { calendarKind = Kind.REMINDER },
                 )
                 Tab.LISTS -> dev.ray.reminders.ui.ListsScreen()
             }

@@ -31,7 +31,7 @@ import dev.ray.reminders.data.Reminder
 
 /** The Alarms tab: big times, a switch on each, ringing ones highlighted. */
 @Composable
-fun AlarmsScreen(alarms: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Unit) {
+fun AlarmsScreen(alarms: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Unit, onCalendar: () -> Unit) {
     val sorted = alarms.sortedWith(compareBy<Reminder> { it.hour * 60 + it.minute }.thenBy { it.id })
     val sel = rememberSelection(alarms.map { it.id }.toSet())
     Box(Modifier.fillMaxSize().background(Nota.Bg)) {
@@ -42,7 +42,10 @@ fun AlarmsScreen(alarms: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Uni
         ) {
             item {
                 if (sel.active) SelectionBar(sel, "alarm", Modifier.statusBarsPadding())
-                else PageHeader("Alarms", Modifier.statusBarsPadding())
+                else Row(Modifier.statusBarsPadding(), verticalAlignment = Alignment.CenterVertically) {
+                    PageHeader("Alarms", Modifier.weight(1f))
+                    CalendarButton(onCalendar)
+                }
             }
             item { FullScreenWarning() }
             if (sorted.isEmpty()) item {

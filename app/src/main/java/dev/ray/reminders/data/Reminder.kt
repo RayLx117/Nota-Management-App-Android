@@ -78,6 +78,10 @@ data class Reminder(
     val minute: Int,
     /** For WEEKLY: java.time.DayOfWeek values, 1 = Monday .. 7 = Sunday. */
     val weekdays: Set<Int> = emptySet(),
+    /** Reminders: optional end time (minutes after midnight); the pinned notification clears itself then. */
+    val endMinute: Int? = null,
+    /** Reminders: all day = notify at 9 AM and stay pinned until midnight; start/end times are ignored. */
+    val allDay: Boolean = false,
     val enabled: Boolean = true,
     val behavior: Behavior = Behavior(),
     /** Optional picture shown in the notification and on the full-screen alarm (a file in app storage). */

@@ -121,6 +121,9 @@ private val ReminderSaver = Saver<Reminder, String>(
 
 private const val DAY_MS = 86_400_000L
 
+/** A new reminder/alarm started from the calendar: its date, time, and whether it repeats yearly. */
+data class Prefill(val epochDay: Long, val minute: Int, val yearly: Boolean)
+
 /** The old "Silent" alert style becomes "Alarm off" now that alarms have their own box. */
 private fun migrateSilent(r: Reminder): Reminder =
     if (r.behavior.alertStyle != AlertStyle.SILENT) r
@@ -128,15 +131,22 @@ private fun migrateSilent(r: Reminder): Reminder =
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditorScreen(existing: Reminder?, kind: Kind, newId: () -> Int, onClose: () -> Unit) {
+fun EditorScreen(existing: Reminder?, kind: Kind, newId: () -> Int, onClose: () -> Unit, prefill: Prefill? = null) {
     val ctx = LocalContext.current
     var r by rememberSaveable(stateSaver = ReminderSaver) {
         mutableStateOf(
             existing?.let(::migrateSilent) ?: LocalDate.now().let { today ->
+                val day = prefill?.let { LocalDate.ofEpochDay(it.epochDay) } ?: today
                 Reminder(
-                    id = newId(), kind = kind, title = "", repeat = if (kind == Kind.ALARM) RepeatType.ONCE else RepeatType.DAILY,
-                    startEpochDay = today.toEpochDay(), hour = 9, minute = 0,
-                    weekdays = setOf(today.dayOfWeek.value),
+                    id = newId(), kind = kind, title = "",
+                    // From the calendar: that date, once (or every year).
+                    repeat = when {
+                        prefill != null -> if (prefill.yearly) RepeatType.YEARLY else RepeatType.ONCE
+                        kind == Kind.ALARM -> RepeatType.ONCE
+                        else -> RepeatType.DAILY
+                    },
+                    startEpochDay = day.toEpochDay(), hour = (prefill?.minute ?: 540) / 60, minute = (prefill?.minute ?: 540) % 60,
+                    weekdays = setOf(day.dayOfWeek.value),
                     behavior = if (kind == Kind.REMINDER) Behavior(alarm = false) else Behavior(),
                 )
             },
@@ -144,6 +154,7 @@ fun EditorScreen(existing: Reminder?, kind: Kind, newId: () -> Int, onClose: () 
     }
     var showDate by remember { mutableStateOf(false) }
     var showTime by remember { mutableStateOf(false) }
+    var showEnd by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var askFullScreen by remember { mutableStateOf(false) }
 
@@ -153,6 +164,8 @@ fun EditorScreen(existing: Reminder?, kind: Kind, newId: () -> Int, onClose: () 
             title = r.title.trim().ifEmpty { if (r.kind == Kind.ALARM) "Alarm" else "Reminder" }, notes = r.notes.trim(),
         )
         cleaned = rollAlarm(cleaned)
+        // All-day reminders go off at 9 AM.
+        if (cleaned.allDay) cleaned = cleaned.copy(hour = 9, minute = 0)
         // Weekly and daily have no date picker: make sure they start no later than today.
         if (cleaned.repeat == RepeatType.WEEKLY || cleaned.repeat == RepeatType.DAILY) {
             cleaned = cleaned.copy(startEpochDay = minOf(cleaned.startEpochDay, LocalDate.now().toEpochDay()))
@@ -246,7 +259,19 @@ fun EditorScreen(existing: Reminder?, kind: Kind, newId: () -> Int, onClose: () 
                         RepeatType.DAILY -> ValueRow("Date", if (r.interval == 1) "Every day" else "Every ${r.interval} days", onClick = null)
                         else -> ValueRow("Date", Describe.date(r.startEpochDay)) { showDate = true }
                     }
-                    ValueRow("Time", Describe.time(r)) { showTime = true }
+                    if (r.kind == Kind.REMINDER) {
+                        ToggleRow("All day", r.allDay) { r = r.copy(allDay = it) }
+                        // Start and end grey out when it's all day.
+                        Column(
+                            Modifier.alpha(if (r.allDay) 0.35f else 1f),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            ValueRow("Start time", Describe.clock(r.hour * 60 + r.minute), if (r.allDay) null else ({ showTime = true }))
+                            ValueRow("End time", r.endMinute?.let(Describe::clock) ?: "None", if (r.allDay) null else ({ showEnd = true }))
+                        }
+                    } else {
+                        ValueRow("Time", Describe.time(r)) { showTime = true }
+                    }
                 }
             }
         }
@@ -308,6 +333,21 @@ fun EditorScreen(existing: Reminder?, kind: Kind, newId: () -> Int, onClose: () 
             dismissButton = {
                 TextButton(onClick = { askFullScreen = false; save(); onClose() }) { Text("Not now", color = Nota.Sub) }
             },
+        )
+    }
+    if (showEnd) {
+        val m = r.endMinute ?: ((r.hour * 60 + r.minute + 60) % (24 * 60))
+        val state = rememberTimePickerState(m / 60, m % 60, DateFormat.is24HourFormat(ctx))
+        AlertDialog(
+            onDismissRequest = { showEnd = false },
+            title = { Text("End time") },
+            confirmButton = {
+                TextButton(onClick = { r = r.copy(endMinute = state.hour * 60 + state.minute); showEnd = false }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { r = r.copy(endMinute = null); showEnd = false }) { Text("No end time") }
+            },
+            text = { TimePicker(state) },
         )
     }
     if (confirmDelete) {

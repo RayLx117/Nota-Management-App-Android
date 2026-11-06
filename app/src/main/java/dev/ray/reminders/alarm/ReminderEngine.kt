@@ -36,6 +36,7 @@ object ReminderEngine {
     const val ACTION_SWIPED = "dev.ray.reminders.action.SWIPED"
     const val ACTION_PREALERT = "dev.ray.reminders.action.PREALERT"
     const val ACTION_SKIP = "dev.ray.reminders.action.SKIP"
+    const val ACTION_END = "dev.ray.reminders.action.END"
     const val EXTRA_ID = "id"
 
     private const val MINUTE = 60_000L
@@ -86,7 +87,7 @@ object ReminderEngine {
     }
 
     fun delete(ctx: Context, id: Int) {
-        listOf(ACTION_FIRE, ACTION_NAG, ACTION_FULLSCREEN, ACTION_SNOOZE_END, ACTION_PREALERT).forEach { cancel(ctx, it, id) }
+        listOf(ACTION_FIRE, ACTION_NAG, ACTION_FULLSCREEN, ACTION_SNOOZE_END, ACTION_PREALERT, ACTION_END).forEach { cancel(ctx, it, id) }
         Notifier.cancelUpcoming(ctx, id)
         Notifier.cancel(ctx, id)
         store(ctx).get(id)?.imagePath?.let(Images::delete)
@@ -149,6 +150,7 @@ object ReminderEngine {
                 activate(ctx, id)
             }
             ACTION_SNOOZE_END -> if (r.snoozedUntil != null) activate(ctx, id)
+            ACTION_END -> if (r.isActive || r.snoozedUntil != null) done(ctx, id)
             ACTION_NAG -> if (r.isActive && r.fx.effectiveNag) {
                 Notifier.show(ctx, r, alert = true, fullScreen = r.fullScreenShownAt != null)
                 setAlarm(ctx, ACTION_NAG, id, now() + nagInterval(r))
@@ -184,11 +186,26 @@ object ReminderEngine {
 
     // ---------------------------------------------------------------- internals
 
+    /** When a just-fired reminder should clear itself: its end time, or midnight for all-day ones. */
+    private fun endAt(r: Reminder): Long? {
+        if (r.kind != Kind.REMINDER) return null
+        val zone = java.time.ZoneId.systemDefault()
+        val today = java.time.LocalDate.now(zone)
+        if (r.allDay) return today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val end = r.endMinute ?: return null
+        var at = today.atStartOfDay(zone).toInstant().toEpochMilli() + end * MINUTE
+        if (at <= now()) at += 24 * 60 * MINUTE // ends after midnight
+        return at
+    }
+
     private fun activate(ctx: Context, id: Int) {
         cancel(ctx, ACTION_SNOOZE_END, id)
+        val wasSnoozed = store(ctx).get(id)?.snoozedUntil != null
         val r = store(ctx).modify(id) {
             it.copy(activeSince = now(), fullScreenShownAt = null, snoozedUntil = null)
         } ?: return
+        // A snooze keeps the original end time; a fresh occurrence sets a new one.
+        if (!wasSnoozed) endAt(r)?.let { setAlarm(ctx, ACTION_END, id, it) } ?: cancel(ctx, ACTION_END, id)
         // No delay (and always for alarms): go straight to the full-screen alarm.
         if (r.fx.effectiveFullScreen && r.fx.fullScreenDelayMinutes == 0) {
             val shown = store(ctx).modify(id) { it.copy(fullScreenShownAt = now()) } ?: return

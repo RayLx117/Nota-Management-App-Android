@@ -21,7 +21,8 @@ object Describe {
     private val monthDayFmt = DateTimeFormatter.ofPattern("MMM d")
     private val whenFmt = DateTimeFormatter.ofPattern("EEE, MMM d 'at' ")
 
-    fun time(r: Reminder): String = LocalTime.of(r.hour, r.minute).format(timeFmt)
+    fun time(r: Reminder): String = if (r.allDay) "All day" else LocalTime.of(r.hour, r.minute).format(timeFmt)
+    fun clock(minuteOfDay: Int): String = LocalTime.of(minuteOfDay / 60, minuteOfDay % 60).format(timeFmt)
     fun date(epochDay: Long): String = LocalDate.ofEpochDay(epochDay).format(dateFmt)
 
     fun dayName(value: Int, style: TextStyle = TextStyle.SHORT): String =

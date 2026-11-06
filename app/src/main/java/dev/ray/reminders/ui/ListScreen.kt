@@ -74,7 +74,7 @@ import androidx.compose.runtime.key
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun ListScreen(reminders: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Unit) {
+fun ListScreen(reminders: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Unit, onCalendar: () -> Unit) {
     val pinned = reminders.filter { it.isActive }.sortedBy { it.activeSince }
     val upcoming = reminders.filterNot { it.isActive }
     // Every reminder lives in both places; each side only shows the ones that belong there, so a
@@ -88,7 +88,7 @@ fun ListScreen(reminders: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Un
     val fx = this
     Box(Modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 110.dp)) {
-            item { Shelf(pinned, shelfOrder, fx, sel, onEdit) }
+            item { Shelf(pinned, shelfOrder, fx, sel, onEdit, onCalendar) }
             item {
                 Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     PermissionCards()
@@ -153,7 +153,9 @@ fun AddButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
 /** The top "shelf": reminders currently sitting in your notification bar. */
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-private fun Shelf(pinned: List<Reminder>, all: List<Reminder>, fx: SharedTransitionScope, sel: Selection, onEdit: (Int) -> Unit) {
+private fun Shelf(
+    pinned: List<Reminder>, all: List<Reminder>, fx: SharedTransitionScope, sel: Selection, onEdit: (Int) -> Unit, onCalendar: () -> Unit,
+) {
     Column(
         Modifier.fillMaxWidth()
             .shadow(16.dp, RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
@@ -168,6 +170,7 @@ private fun Shelf(pinned: List<Reminder>, all: List<Reminder>, fx: SharedTransit
                 Text("Reminders", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp, color = Nota.Text)
                 Dot(size = 9.dp, modifier = Modifier.padding(start = 2.dp, top = 6.dp))
             }
+            CalendarButton(onCalendar, Modifier.padding(end = if (pinned.isNotEmpty()) 10.dp else 0.dp))
             if (pinned.isNotEmpty()) {
                 Text(
                     "${pinned.size} waiting", color = Nota.Ink, fontFamily = Nota.Outfit, fontWeight = FontWeight.SemiBold,
