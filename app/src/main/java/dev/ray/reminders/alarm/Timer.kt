@@ -232,7 +232,8 @@ object Timer {
             .setGroup("timer")
         if (s.running) {
             // Android 16 Live Update: shows on the lock screen's Now Bar and as a status bar chip.
-            if (android.os.Build.VERSION.SDK_INT >= 36) b.setRequestPromotedOngoing(true)
+            // Same extra NotificationCompat.setRequestPromotedOngoing() sets; ignored before Android 16.
+            b.addExtras(android.os.Bundle().apply { putBoolean("android.requestPromotedOngoing", true) })
             b.setUsesChronometer(true).setChronometerCountDown(true).setWhen(s.endAt).setShowWhen(true)
                 .addAction(action(ctx, "Pause", ACTION_PAUSE))
                 .addAction(action(ctx, "+1 min", ACTION_ADD))
