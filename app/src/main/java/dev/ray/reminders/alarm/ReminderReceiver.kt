@@ -26,5 +26,6 @@ class RestoreReceiver : BroadcastReceiver() {
         Notifier.ensureChannels(context)
         ReminderEngine.restoreAll(context)
         Timer.restore(context)
+        ListAlarms.restore(context)
     }
 }

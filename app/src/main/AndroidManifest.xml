@@ -46,6 +46,10 @@
             android:taskAffinity="dev.ray.reminders.timer" />
 
         <receiver
+            android:name=".alarm.ListReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".alarm.TimerReceiver"
             android:exported="false" />
 

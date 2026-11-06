@@ -54,21 +54,29 @@ import dev.ray.reminders.ui.RemindersTheme
 class MainActivity : ComponentActivity() {
     /** Bumped whenever a notification asks us to open the Timer tab. */
     private val openTimer = androidx.compose.runtime.mutableIntStateOf(0)
+    private val openLists = androidx.compose.runtime.mutableIntStateOf(0)
+
+    private fun route(intent: android.content.Intent?) {
+        when (intent?.getStringExtra(EXTRA_TAB)) {
+            "timer" -> openTimer.intValue++
+            "lists" -> openLists.intValue++
+        }
+    }
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
-        if (intent.getStringExtra(EXTRA_TAB) == "timer") openTimer.intValue++
+        route(intent)
     }
 
     companion object { const val EXTRA_TAB = "tab" }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (intent?.getStringExtra(EXTRA_TAB) == "timer") openTimer.intValue++
+        route(intent)
         // Nota is always dark, so always use light status/navigation bar icons.
         enableEdgeToEdge(SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.dark(Color.TRANSPARENT))
         Notifier.ensureChannels(this)
-        setContent { RemindersTheme { App(openTimer.intValue) } }
+        setContent { RemindersTheme { App(openTimer.intValue, openLists.intValue) } }
     }
 }
 
@@ -82,7 +90,7 @@ private enum class Tab(val label: String, val icon: Int) {
 }
 
 @Composable
-private fun App(openTimer: Int) {
+private fun App(openTimer: Int, openLists: Int) {
     val ctx = LocalContext.current
     val store = remember { ReminderStore.get(ctx) }
     val items by store.items.collectAsState()
@@ -93,6 +101,9 @@ private fun App(openTimer: Int) {
     val scope = rememberCoroutineScope()
     androidx.compose.runtime.LaunchedEffect(openTimer) {
         if (openTimer > 0) { editingId = null; pager.scrollToPage(Tab.TIMER.ordinal) }
+    }
+    androidx.compose.runtime.LaunchedEffect(openLists) {
+        if (openLists > 0) { editingId = null; pager.scrollToPage(Tab.LISTS.ordinal) }
     }
 
     val current = editingId

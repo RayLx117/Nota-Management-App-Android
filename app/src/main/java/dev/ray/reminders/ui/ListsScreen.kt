@@ -75,6 +75,14 @@ import dev.ray.reminders.data.ListsStore
 import dev.ray.reminders.data.NotaList
 import dev.ray.reminders.data.Status
 import kotlinx.coroutines.launch
+import dev.ray.reminders.alarm.ListAlarms
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 
 /** The Lists tab: every list is a rounded card; swipe between them, the last card makes a new one. */
 @Composable
@@ -165,7 +173,7 @@ private fun ListCard(list: NotaList, store: ListsStore) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        if (list.type == ListType.CHECKLIST) "CHECKLIST" else "STATUS LIST",
+                        if (list.type == ListType.CHECKLIST) "CHECKLIST" else "SECTIONED LIST",
                         style = Nota.Label, color = Nota.Sub,
                     )
                     Text(
@@ -189,7 +197,7 @@ private fun ListCard(list: NotaList, store: ListsStore) {
                     DropdownMenu(menu, onDismissRequest = { menu = false }, containerColor = Nota.Raised) {
                         DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; renaming = true })
                         if (list.type == ListType.STATUS) {
-                            DropdownMenuItem(text = { Text("Edit statuses") }, onClick = { menu = false; editingStatuses = true })
+                            DropdownMenuItem(text = { Text("Edit sections") }, onClick = { menu = false; editingStatuses = true })
                         }
                         DropdownMenuItem(
                             text = { Text("Delete list", color = Nota.Error) },
@@ -204,7 +212,7 @@ private fun ListCard(list: NotaList, store: ListsStore) {
                     ListType.STATUS -> StatusBody(
                         list,
                         onEditStatuses = { editingStatuses = true },
-                        onAdd = { status -> editingItem = ListItem(0, "", statusId = status) },
+                        onAdd = { section -> editingItem = ListItem(0, "", statusIds = listOf(section)) },
                         onOpen = { editingItem = it },
                     )
                 }
@@ -228,7 +236,7 @@ private fun ListCard(list: NotaList, store: ListsStore) {
     if (editingStatuses) StatusesDialog(list, store, onDismiss = { editingStatuses = false })
     editingItem?.let { item ->
         ItemDialog(list, item, onDismiss = { editingItem = null }, onSave = { saved ->
-            if (saved.id == 0) store.addItem(list.id, saved.text, saved.description, saved.statusId)
+            if (saved.id == 0) store.addItem(list.id, saved)
             else store.updateItem(list.id, saved)
             editingItem = null
         }, onDelete = { store.deleteItem(list.id, item.id); editingItem = null })
@@ -243,7 +251,7 @@ private fun ChecklistBody(list: NotaList, store: ListsStore) {
     var draft by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<ListItem?>(null) }
     fun add() {
-        if (draft.isNotBlank()) store.addItem(list.id, draft.trim())
+        if (draft.isNotBlank()) store.addItem(list.id, ListItem(0, draft.trim()))
         draft = ""
     }
     Column {
@@ -266,22 +274,35 @@ private fun ChecklistBody(list: NotaList, store: ListsStore) {
         val ordered = list.items.filterNot { it.checked } + list.items.filter { it.checked }
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
             items(ordered, key = { it.id }) { item ->
+                val ctx = LocalContext.current
                 Row(
                     Modifier.fillMaxWidth().animateItem().clip(RoundedCornerShape(14.dp))
-                        .combinedClickable(
-                            onClick = { store.updateItem(list.id, item.copy(checked = !item.checked)) },
-                            onLongClick = { editing = item },
-                        )
-                        .padding(vertical = 12.dp, horizontal = 4.dp),
+                        .clickable { editing = item }
+                        .padding(vertical = 10.dp, horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    SelectCircle(item.checked)
-                    Text(
-                        item.text, style = MaterialTheme.typography.bodyLarge,
-                        color = if (item.checked) Nota.Sub else Nota.Text,
-                        textDecoration = if (item.checked) TextDecoration.LineThrough else null,
-                        modifier = Modifier.padding(start = 14.dp),
+                    // The circle checks it off; the rest of the row opens it.
+                    SelectCircle(
+                        item.checked,
+                        Modifier.clip(CircleShape).clickable { store.updateItem(list.id, item.copy(checked = !item.checked)) },
                     )
+                    Column(Modifier.padding(start = 14.dp).weight(1f)) {
+                        Text(
+                            item.text, style = MaterialTheme.typography.bodyLarge,
+                            color = if (item.checked) Nota.Sub else Nota.Text,
+                            textDecoration = if (item.checked) TextDecoration.LineThrough else null,
+                        )
+                        if (item.dueDay != null && !item.checked) {
+                            val late = (item.dueAt() ?: Long.MAX_VALUE) < System.currentTimeMillis()
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "Due " + ListAlarms.describeDue(ctx, item), style = MaterialTheme.typography.bodySmall,
+                                    color = if (late) Nota.Error else Nota.Sub,
+                                )
+                                if (item.remindBefore != null) Dot(size = 6.dp, color = Nota.Cyan, modifier = Modifier.padding(start = 6.dp))
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -300,55 +321,51 @@ private val SECTION_COLORS = listOf(Nota.Mint, Nota.Cyan, Nota.Violet, Nota.Ambe
 private fun StatusBody(
     list: NotaList,
     onEditStatuses: () -> Unit,
-    onAdd: (Int?) -> Unit,
+    onAdd: (Int) -> Unit,
     onOpen: (ListItem) -> Unit,
 ) {
     if (list.statuses.isEmpty()) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Add your statuses first.", style = MaterialTheme.typography.bodyLarge, color = Nota.Sub)
+            Text("Add your sections first.", style = MaterialTheme.typography.bodyLarge, color = Nota.Sub)
             Spacer(Modifier.height(14.dp))
-            SoftButton("Add statuses", onClick = onEditStatuses, color = Nota.Mint, height = 46.dp)
+            SoftButton("Add sections", onClick = onEditStatuses, color = Nota.Mint, height = 46.dp)
         }
         return
     }
     val known = list.statuses.map { it.id }.toSet()
-    val loose = list.items.filter { it.statusId == null || it.statusId !in known }
-    Box(Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 6.dp, bottom = 80.dp)) {
-            list.statuses.forEachIndexed { i, status ->
-                val color = SECTION_COLORS[i % SECTION_COLORS.size]
-                val inSection = list.items.filter { it.statusId == status.id }
-                item(key = "s${status.id}") { SectionHeader(status.name, inSection.size, color) { onAdd(status.id) } }
-                items(inSection, key = { "i${it.id}" }) { StatusItemRow(it, color) { onOpen(it) } }
-            }
-            if (loose.isNotEmpty()) {
-                item(key = "none") { SectionHeader("No status", loose.size, Nota.Outline, onAdd = null) }
-                items(loose, key = { "i${it.id}" }) { StatusItemRow(it, Nota.Outline) { onOpen(it) } }
+    val loose = list.items.filter { it.sections.none { id -> id in known } }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = 20.dp)) {
+        list.statuses.forEachIndexed { i, section ->
+            val color = SECTION_COLORS[i % SECTION_COLORS.size]
+            item(key = "s${section.id}") {
+                SectionBox(section.name, color, list.items.filter { section.id in it.sections }, onOpen) { onAdd(section.id) }
             }
         }
-        Box(
-            Modifier.align(Alignment.BottomEnd).padding(bottom = 14.dp).size(52.dp).clip(CircleShape)
-                .background(Nota.Mint).clickable { onAdd(list.statuses.first().id) },
-            contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.Add, contentDescription = "Add item", tint = Nota.Ink) }
+        if (loose.isNotEmpty()) item(key = "none") { SectionBox("No section", Nota.Outline, loose, onOpen, onAdd = null) }
     }
 }
 
+/** A thin rounded outline with the section's name sitting in a gap at the top centre, and + at the bottom. */
 @Composable
-private fun SectionHeader(name: String, count: Int, color: Color, onAdd: (() -> Unit)?) {
-    Row(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Dot(size = 9.dp, color = color)
+private fun SectionBox(name: String, color: Color, items: List<ListItem>, onOpen: (ListItem) -> Unit, onAdd: (() -> Unit)?) {
+    Box(Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 4.dp)) {
+        Column(
+            Modifier.fillMaxWidth().border(1.5.dp, color.copy(alpha = 0.75f), RoundedCornerShape(22.dp))
+                .padding(start = 10.dp, end = 10.dp, top = 20.dp, bottom = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            items.forEach { StatusItemRow(it, color) { onOpen(it) } }
+            if (onAdd != null) Box(
+                Modifier.padding(top = if (items.isEmpty()) 0.dp else 4.dp).size(38.dp).clip(CircleShape).clickable(onClick = onAdd),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Filled.Add, contentDescription = "Add to $name", tint = color, modifier = Modifier.size(24.dp)) }
+        }
+        // The name breaks the line: same colour as the card behind it.
         Text(
-            name.uppercase(), style = Nota.Label, color = Nota.Text,
-            modifier = Modifier.padding(start = 8.dp).weight(1f, fill = false),
+            name, color = color, fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp,
             maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = (-11).dp).background(Nota.Shelf).padding(horizontal = 10.dp),
         )
-        Text("  $count", style = Nota.Label, color = Nota.Sub)
-        Spacer(Modifier.weight(1f))
-        if (onAdd != null) Box(
-            Modifier.size(30.dp).clip(CircleShape).clickable(onClick = onAdd),
-            contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.Add, contentDescription = "Add to $name", tint = color, modifier = Modifier.size(20.dp)) }
     }
 }
 
@@ -395,8 +412,8 @@ private fun NewListDialog(onDismiss: () -> Unit, onCreate: (String, ListType) ->
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
                     shape = RoundedCornerShape(16.dp), colors = fieldColors(), modifier = Modifier.fillMaxWidth(),
                 )
-                TypeOption("Checklist", "Check things off, then clear them", type == ListType.CHECKLIST) { type = ListType.CHECKLIST }
-                TypeOption("Status list", "Sort items into your own statuses", type == ListType.STATUS) { type = ListType.STATUS }
+                TypeOption("Checklist", "Check things off, with optional due dates", type == ListType.CHECKLIST) { type = ListType.CHECKLIST }
+                TypeOption("Sectioned list", "Group items into your own sections", type == ListType.STATUS) { type = ListType.STATUS }
             }
         },
         confirmButton = {
@@ -444,15 +461,32 @@ private fun NameDialog(title: String, initial: String, confirm: String, onDismis
     )
 }
 
-/** Add or edit an item. Status lists also get a description and a status; checklists just the name. */
-@OptIn(ExperimentalLayoutApi::class)
+private val REMIND_OPTIONS: List<Int?> = listOf(null, 0, 15, 60, 24 * 60)
+
+private fun remindLabel(minutes: Int?, hasTime: Boolean) = when (minutes) {
+    null -> "No reminder"
+    0 -> if (hasTime) "Remind at due time" else "Remind on the day (9 AM)"
+    15 -> "Remind 15 min before"
+    60 -> "Remind 1 hour before"
+    else -> "Remind 1 day before"
+}
+
+/** Add or edit an item. Sectioned lists get a description and sections; checklists a due date and reminder. */
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun ItemDialog(list: NotaList, item: ListItem, onDismiss: () -> Unit, onSave: (ListItem) -> Unit, onDelete: () -> Unit) {
+    val ctx = LocalContext.current
     var text by remember { mutableStateOf(item.text) }
     var description by remember { mutableStateOf(item.description) }
-    var status by remember { mutableStateOf(item.statusId) }
+    var sections by remember { mutableStateOf(item.sections) }
+    var dueDay by remember { mutableStateOf(item.dueDay) }
+    var dueMinute by remember { mutableStateOf(item.dueMinute) }
+    var remind by remember { mutableStateOf(item.remindBefore) }
+    var pickDate by remember { mutableStateOf(false) }
+    var pickTime by remember { mutableStateOf(false) }
+    var remindMenu by remember { mutableStateOf(false) }
     val isNew = item.id == 0
-    val isStatus = list.type == ListType.STATUS
+    val sectioned = list.type == ListType.STATUS
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Nota.Shelf,
@@ -464,16 +498,44 @@ private fun ItemDialog(list: NotaList, item: ListItem, onDismiss: () -> Unit, on
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     shape = RoundedCornerShape(16.dp), colors = fieldColors(), modifier = Modifier.fillMaxWidth(),
                 )
-                if (isStatus) {
+                if (sectioned) {
                     OutlinedTextField(
                         value = description, onValueChange = { description = it }, label = { Text("Description") },
                         minLines = 2, maxLines = 5,
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                         shape = RoundedCornerShape(16.dp), colors = fieldColors(), modifier = Modifier.fillMaxWidth(),
                     )
-                    Text("STATUS", style = Nota.Label, color = Nota.Sub, modifier = Modifier.padding(top = 4.dp))
+                    Text("SECTIONS", style = Nota.Label, color = Nota.Sub, modifier = Modifier.padding(top = 4.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        list.statuses.forEach { s -> DotChip(s.name, status == s.id) { status = s.id } }
+                        list.statuses.forEach { s ->
+                            DotChip(s.name, s.id in sections) { sections = if (s.id in sections) sections - s.id else sections + s.id }
+                        }
+                    }
+                } else {
+                    // Due date, optional time, and a reminder once there's a date.
+                    val probe = ListItem(0, "", dueDay = dueDay, dueMinute = dueMinute)
+                    DialogRow(
+                        if (dueDay == null) "Add due date" else "Due " + ListAlarms.describeDue(ctx, probe.copy(dueMinute = null)),
+                        active = dueDay != null, onClick = { pickDate = true },
+                        onClear = if (dueDay != null) ({ dueDay = null; dueMinute = null; remind = null }) else null,
+                    )
+                    if (dueDay != null) {
+                        DialogRow(
+                            dueMinute?.let { "At " + timeText(ctx, it) } ?: "Add time",
+                            active = dueMinute != null, onClick = { pickTime = true },
+                            onClear = if (dueMinute != null) ({ dueMinute = null }) else null,
+                        )
+                        Box {
+                            DialogRow(remindLabel(remind, dueMinute != null), active = remind != null, onClick = { remindMenu = true }, onClear = null)
+                            DropdownMenu(remindMenu, onDismissRequest = { remindMenu = false }, containerColor = Nota.Raised) {
+                                REMIND_OPTIONS.forEach { m ->
+                                    DropdownMenuItem(
+                                        text = { Text(remindLabel(m, dueMinute != null)) },
+                                        onClick = { remind = m; remindMenu = false },
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
                 if (!isNew) TextButton(onClick = onDelete) { Text("Delete item", color = Nota.Error) }
@@ -481,15 +543,74 @@ private fun ItemDialog(list: NotaList, item: ListItem, onDismiss: () -> Unit, on
         },
         confirmButton = {
             TextButton(
-                onClick = { onSave(item.copy(text = text.trim(), description = description.trim(), statusId = status)) },
+                onClick = {
+                    onSave(
+                        item.copy(
+                            text = text.trim(), description = description.trim(), statusId = null,
+                            statusIds = list.statuses.map { it.id }.filter { it in sections },
+                            dueDay = dueDay, dueMinute = dueMinute, remindBefore = if (dueDay == null) null else remind,
+                        ),
+                    )
+                },
                 enabled = text.isNotBlank(),
             ) { Text(if (isNew) "Add" else "Save", color = if (text.isNotBlank()) Nota.Mint else Nota.Outline) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Nota.Sub) } },
     )
+    if (pickDate) {
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = (dueDay ?: java.time.LocalDate.now().toEpochDay()) * 86_400_000L,
+        )
+        DatePickerDialog(
+            onDismissRequest = { pickDate = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { dueDay = it / 86_400_000L }
+                    pickDate = false
+                }) { Text("OK", color = Nota.Mint) }
+            },
+            dismissButton = { TextButton(onClick = { pickDate = false }) { Text("Cancel", color = Nota.Sub) } },
+        ) { DatePicker(state) }
+    }
+    if (pickTime) {
+        val m = dueMinute ?: (9 * 60)
+        val state = rememberTimePickerState(m / 60, m % 60, android.text.format.DateFormat.is24HourFormat(ctx))
+        AlertDialog(
+            onDismissRequest = { pickTime = false },
+            containerColor = Nota.Shelf,
+            confirmButton = {
+                TextButton(onClick = { dueMinute = state.hour * 60 + state.minute; pickTime = false }) { Text("OK", color = Nota.Mint) }
+            },
+            dismissButton = { TextButton(onClick = { pickTime = false }) { Text("Cancel", color = Nota.Sub) } },
+            text = { TimePicker(state) },
+        )
+    }
 }
 
-/** Add, rename, reorder and remove a status list's statuses. Changes apply as you go. */
+private fun timeText(ctx: android.content.Context, minutes: Int): String {
+    val cal = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.HOUR_OF_DAY, minutes / 60); set(java.util.Calendar.MINUTE, minutes % 60)
+    }
+    return android.text.format.DateFormat.getTimeFormat(ctx).format(cal.time)
+}
+
+/** A tappable grey row in the item dialog, with an optional ✕ to clear it. */
+@Composable
+private fun DialogRow(text: String, active: Boolean, onClick: () -> Unit, onClear: (() -> Unit)?) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nota.Raised).clickable(onClick = onClick)
+            .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text, style = MaterialTheme.typography.bodyLarge, color = if (active) Nota.Text else Nota.Mint, modifier = Modifier.weight(1f))
+        if (onClear != null) Icon(
+            Icons.Filled.Close, contentDescription = "Clear", tint = Nota.Sub,
+            modifier = Modifier.size(22.dp).clip(CircleShape).clickable(onClick = onClear),
+        )
+    }
+}
+
+/** Add, rename, reorder and remove a sectioned list's sections. Changes apply as you go. */
 @Composable
 private fun StatusesDialog(list: NotaList, store: ListsStore, onDismiss: () -> Unit) {
     var draft by remember { mutableStateOf("") }
@@ -501,7 +622,7 @@ private fun StatusesDialog(list: NotaList, store: ListsStore, onDismiss: () -> U
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Nota.Shelf,
-        title = { Text("Statuses") },
+        title = { Text("Sections") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 list.statuses.forEachIndexed { i, s ->
@@ -538,7 +659,7 @@ private fun StatusesDialog(list: NotaList, store: ListsStore, onDismiss: () -> U
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                     OutlinedTextField(
                         value = draft, onValueChange = { draft = it }, singleLine = true,
-                        placeholder = { Text("New status", color = Nota.Sub) },
+                        placeholder = { Text("New section", color = Nota.Sub) },
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { add() }),
                         shape = RoundedCornerShape(14.dp), colors = fieldColors(), modifier = Modifier.weight(1f),
@@ -547,7 +668,7 @@ private fun StatusesDialog(list: NotaList, store: ListsStore, onDismiss: () -> U
                         Modifier.padding(start = 8.dp).size(44.dp).clip(CircleShape)
                             .background(if (draft.isBlank()) Nota.Raised else Nota.Mint).clickable { add() },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Add, contentDescription = "Add status", tint = if (draft.isBlank()) Nota.Sub else Nota.Ink) }
+                    ) { Icon(Icons.Filled.Add, contentDescription = "Add section", tint = if (draft.isBlank()) Nota.Sub else Nota.Ink) }
                 }
             }
         },

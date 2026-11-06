@@ -11,7 +11,7 @@ import java.io.File
 @Serializable
 enum class ListType { CHECKLIST, STATUS }
 
-/** A user-made status; a status list shows one section per status, in list order. */
+/** A user-made section of a sectioned list (stored as STATUS for older data); shown in list order. */
 @Serializable
 data class Status(val id: Int, val name: String)
 
@@ -21,8 +21,26 @@ data class ListItem(
     val text: String,
     val description: String = "",
     val checked: Boolean = false,
+    /** Legacy single section; read through [sections]. */
     val statusId: Int? = null,
-)
+    /** Every section this item is in (an item can be in several). */
+    val statusIds: List<Int> = emptyList(),
+    /** Checklist due date (epoch day) and optional time (minutes after midnight). */
+    val dueDay: Long? = null,
+    val dueMinute: Int? = null,
+    /** Notify this many minutes before it's due; null = no reminder. */
+    val remindBefore: Int? = null,
+) {
+    val sections: Set<Int> get() = (statusIds + listOfNotNull(statusId)).toSet()
+
+    /** When it's due, for reminders: the set time, or 9 AM on the day if no time was set. */
+    fun dueAt(): Long? = dueDay?.let { day ->
+        java.time.LocalDate.ofEpochDay(day).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() +
+            (dueMinute ?: (9 * 60)) * 60_000L
+    }
+
+    fun remindAt(): Long? = if (remindBefore == null) null else dueAt()?.minus(remindBefore * 60_000L)
+}
 
 @Serializable
 data class NotaList(
@@ -37,7 +55,7 @@ data class NotaList(
 }
 
 /** All lists in one JSON file, exposed as a StateFlow. */
-class ListsStore private constructor(private val file: File) {
+class ListsStore private constructor(private val ctx: Context, private val file: File) {
     private val lock = Any()
     private val _lists = MutableStateFlow(load())
     val lists: StateFlow<List<NotaList>> = _lists.asStateFlow()
@@ -52,9 +70,11 @@ class ListsStore private constructor(private val file: File) {
 
     fun update(id: Int, change: (NotaList) -> NotaList) = mutate { l -> l.map { if (it.id == id) change(it) else it } }
 
-    fun addItem(listId: Int, text: String, description: String = "", statusId: Int? = null) = update(listId) {
-        it.copy(items = it.items + ListItem(it.nextItemId(), text, description, statusId = statusId))
+    fun addItem(listId: Int, item: ListItem) = update(listId) {
+        it.copy(items = it.items + item.copy(id = it.nextItemId()))
     }
+
+    fun item(listId: Int, itemId: Int) = _lists.value.firstOrNull { it.id == listId }?.items?.firstOrNull { it.id == itemId }
 
     fun updateItem(listId: Int, item: ListItem) = update(listId) { l ->
         l.copy(items = l.items.map { if (it.id == item.id) item else it })
@@ -65,8 +85,10 @@ class ListsStore private constructor(private val file: File) {
     fun clearChecked(listId: Int) = update(listId) { l -> l.copy(items = l.items.filterNot { it.checked }) }
 
     private fun mutate(change: (List<NotaList>) -> List<NotaList>) = synchronized(lock) {
-        val updated = change(_lists.value)
+        val before = _lists.value
+        val updated = change(before)
         _lists.value = updated
+        dev.ray.reminders.alarm.ListAlarms.sync(ctx, before, updated)
         val tmp = File(file.parentFile, file.name + ".tmp")
         tmp.writeText(ReminderStore.json.encodeToString(updated))
         tmp.renameTo(file)
@@ -81,7 +103,7 @@ class ListsStore private constructor(private val file: File) {
     companion object {
         @Volatile private var instance: ListsStore? = null
         fun get(context: Context): ListsStore = instance ?: synchronized(this) {
-            instance ?: ListsStore(File(context.applicationContext.filesDir, "lists.json")).also { instance = it }
+            instance ?: ListsStore(context.applicationContext, File(context.applicationContext.filesDir, "lists.json")).also { instance = it }
         }
     }
 }
