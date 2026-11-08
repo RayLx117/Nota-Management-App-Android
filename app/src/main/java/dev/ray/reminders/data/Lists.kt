@@ -15,6 +15,10 @@ enum class ListType { CHECKLIST, STATUS }
 @Serializable
 data class Status(val id: Int, val name: String)
 
+/** How a list item's picture shows: fading in on the right, a banner on top, or only when opened. */
+@Serializable
+enum class ListImageStyle { FADE, BANNER, EXPAND }
+
 @Serializable
 data class ListItem(
     val id: Int,
@@ -32,6 +36,9 @@ data class ListItem(
     val dueMinute: Int? = null,
     /** Notify this many minutes before it's due; null = no reminder. */
     val remindBefore: Int? = null,
+    /** Optional picture (a file in app storage). */
+    val imagePath: String? = null,
+    val imageStyle: ListImageStyle = ListImageStyle.FADE,
 ) {
     val sections: Set<Int> get() = (statusIds + listOfNotNull(statusId)).toSet()
 
@@ -68,7 +75,10 @@ class ListsStore private constructor(private val ctx: Context, private val file:
         return id
     }
 
-    fun delete(id: Int) = mutate { l -> l.filterNot { it.id == id } }
+    fun delete(id: Int) = mutate { l ->
+        l.firstOrNull { it.id == id }?.items?.forEach { i -> i.imagePath?.let(Images::delete) }
+        l.filterNot { it.id == id }
+    }
 
     fun update(id: Int, change: (NotaList) -> NotaList) = mutate { l -> l.map { if (it.id == id) change(it) else it } }
 
@@ -79,12 +89,19 @@ class ListsStore private constructor(private val ctx: Context, private val file:
     fun item(listId: Int, itemId: Int) = _lists.value.firstOrNull { it.id == listId }?.items?.firstOrNull { it.id == itemId }
 
     fun updateItem(listId: Int, item: ListItem) = update(listId) { l ->
+        l.items.firstOrNull { it.id == item.id }?.imagePath?.let { old -> if (old != item.imagePath) Images.delete(old) }
         l.copy(items = l.items.map { if (it.id == item.id) item else it })
     }
 
-    fun deleteItem(listId: Int, itemId: Int) = update(listId) { l -> l.copy(items = l.items.filterNot { it.id == itemId }) }
+    fun deleteItem(listId: Int, itemId: Int) = update(listId) { l ->
+        l.items.firstOrNull { it.id == itemId }?.imagePath?.let(Images::delete)
+        l.copy(items = l.items.filterNot { it.id == itemId })
+    }
 
-    fun clearChecked(listId: Int) = update(listId) { l -> l.copy(items = l.items.filterNot { it.checked }) }
+    fun clearChecked(listId: Int) = update(listId) { l ->
+        l.items.filter { it.checked }.forEach { i -> i.imagePath?.let(Images::delete) }
+        l.copy(items = l.items.filterNot { it.checked })
+    }
 
     private fun mutate(change: (List<NotaList>) -> List<NotaList>) = synchronized(lock) {
         val before = _lists.value

@@ -118,8 +118,9 @@ fun ListsScreen() {
         PageHeader("Lists", Modifier.padding(horizontal = 16.dp))
         HorizontalPager(
             pager,
-            contentPadding = PaddingValues(horizontal = 26.dp),
-            pageSpacing = 12.dp,
+            // The open list fills almost the whole width; only a sliver of its neighbours shows.
+            contentPadding = PaddingValues(horizontal = 10.dp),
+            pageSpacing = 5.dp,
             modifier = Modifier.weight(1f).padding(top = 4.dp),
         ) { page ->
             val list = lists.getOrNull(page)
@@ -189,8 +190,8 @@ private fun ListCard(list: NotaList, store: ListsStore) {
     var editingItem by remember { mutableStateOf<ListItem?>(null) }
 
     CardFrame {
-        Column(Modifier.fillMaxSize().padding(start = 18.dp, end = 6.dp, top = 16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.fillMaxSize().padding(top = 16.dp)) {
+            Row(Modifier.padding(start = 18.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         if (list.type == ListType.CHECKLIST) "CHECKLIST" else "CATEGORIZED LIST",
@@ -226,7 +227,8 @@ private fun ListCard(list: NotaList, store: ListsStore) {
                     }
                 }
             }
-            Box(Modifier.weight(1f).padding(end = 12.dp)) {
+            // Categorized lists run their category outlines close to the card's edge.
+            Box(Modifier.weight(1f).padding(horizontal = if (list.type == ListType.STATUS) 6.dp else 12.dp)) {
                 when (list.type) {
                     ListType.CHECKLIST -> ChecklistBody(list, store)
                     ListType.STATUS -> StatusBody(
@@ -270,6 +272,8 @@ private fun ListCard(list: NotaList, store: ListsStore) {
 private fun ChecklistBody(list: NotaList, store: ListsStore) {
     var draft by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<ListItem?>(null) }
+    // Items opened up to show their full notes and picture.
+    var open by remember { mutableStateOf(setOf<Int>()) }
     fun add() {
         if (draft.isNotBlank()) store.addItem(list.id, ListItem(0, draft.trim()))
         draft = ""
@@ -295,23 +299,26 @@ private fun ChecklistBody(list: NotaList, store: ListsStore) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
             items(ordered, key = { it.id }) { item ->
                 val ctx = LocalContext.current
-                Row(
-                    Modifier.fillMaxWidth().animateItem().clip(RoundedCornerShape(14.dp))
-                        .clickable { editing = item }
-                        .padding(vertical = 10.dp, horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // The circle checks it off; the rest of the row opens it.
-                    SelectCircle(
-                        item.checked,
-                        Modifier.clip(CircleShape).clickable { store.updateItem(list.id, item.copy(checked = !item.checked)) },
-                    )
-                    Column(Modifier.padding(start = 14.dp).weight(1f)) {
+                ListItemCard(
+                    item, expanded = item.id in open,
+                    onToggle = { open = if (item.id in open) open - item.id else open + item.id },
+                    onEdit = { editing = item }, background = Nota.Shelf,
+                    modifier = Modifier.animateItem().padding(vertical = 2.dp),
+                    leading = {
+                        // The circle checks it off; the rest of the row opens it.
+                        SelectCircle(
+                            item.checked,
+                            Modifier.clip(CircleShape).clickable { store.updateItem(list.id, item.copy(checked = !item.checked)) },
+                        )
+                    },
+                    title = {
                         Text(
                             item.text, style = MaterialTheme.typography.bodyLarge,
                             color = if (item.checked) Nota.Sub else Nota.Text,
                             textDecoration = if (item.checked) TextDecoration.LineThrough else null,
                         )
+                    },
+                    extra = {
                         if (item.dueDay != null && !item.checked) {
                             val late = (item.dueAt() ?: Long.MAX_VALUE) < System.currentTimeMillis()
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -322,8 +329,8 @@ private fun ChecklistBody(list: NotaList, store: ListsStore) {
                                 if (item.remindBefore != null) Dot(size = 6.dp, color = Nota.Cyan, modifier = Modifier.padding(start = 6.dp))
                             }
                         }
-                    }
-                }
+                    },
+                )
             }
         }
     }
@@ -354,27 +361,35 @@ private fun StatusBody(
     }
     val known = list.statuses.map { it.id }.toSet()
     val loose = list.items.filter { it.sections.none { id -> id in known } }
+    var open by remember { mutableStateOf(setOf<String>()) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = 20.dp)) {
         list.statuses.forEachIndexed { i, section ->
             val color = SECTION_COLORS[i % SECTION_COLORS.size]
             item(key = "s${section.id}") {
-                SectionBox(section.name, color, list.items.filter { section.id in it.sections }, onOpen) { onAdd(section.id) }
+                SectionBox(section.name, color, list.items.filter { section.id in it.sections }, "s${section.id}", open, { open = it }, onOpen) { onAdd(section.id) }
             }
         }
-        if (loose.isNotEmpty()) item(key = "none") { SectionBox("No category", Nota.Outline, loose, onOpen, onAdd = null) }
+        if (loose.isNotEmpty()) item(key = "none") { SectionBox("No category", Nota.Outline, loose, "none", open, { open = it }, onOpen, onAdd = null) }
     }
 }
 
 /** A thin rounded outline with the section's name sitting in a gap at the top centre, and + at the bottom. */
 @Composable
-private fun SectionBox(name: String, color: Color, items: List<ListItem>, onOpen: (ListItem) -> Unit, onAdd: (() -> Unit)?) {
+private fun SectionBox(
+    name: String, color: Color, items: List<ListItem>, key: String, open: Set<String>, setOpen: (Set<String>) -> Unit,
+    onOpen: (ListItem) -> Unit, onAdd: (() -> Unit)?,
+) {
     Box(Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 4.dp)) {
         Column(
             Modifier.fillMaxWidth().border(1.5.dp, color.copy(alpha = 0.75f), RoundedCornerShape(22.dp))
-                .padding(start = 10.dp, end = 10.dp, top = 20.dp, bottom = 8.dp),
+                .padding(start = 8.dp, end = 8.dp, top = 20.dp, bottom = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            items.forEach { StatusItemRow(it, color) { onOpen(it) } }
+            items.forEach { item ->
+                // The same item can sit in several categories, so each spot opens on its own.
+                val k = "$key/${item.id}"
+                StatusItemRow(item, color, expanded = k in open, onToggle = { setOpen(if (k in open) open - k else open + k) }) { onOpen(item) }
+            }
             if (onAdd != null) Box(
                 Modifier.padding(top = if (items.isEmpty()) 0.dp else 4.dp).size(38.dp).clip(CircleShape).clickable(onClick = onAdd),
                 contentAlignment = Alignment.Center,
@@ -390,32 +405,13 @@ private fun SectionBox(name: String, color: Color, items: List<ListItem>, onOpen
 }
 
 @Composable
-private fun StatusItemRow(item: ListItem, color: Color, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(16.dp)).background(Nota.Raised)
-            .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.width(4.dp).height(if (item.description.isBlank() || item.notesRight) 20.dp else 36.dp).clip(RoundedCornerShape(2.dp)).background(color))
-        if (item.notesRight) {
-            // Name on the left, notes on the right of the same line.
-            Text(
-                item.text, style = MaterialTheme.typography.titleMedium, color = Nota.Text, maxLines = 1,
-                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 12.dp).weight(1f, fill = false),
-            )
-            if (item.description.isNotBlank()) Text(
-                item.description, style = MaterialTheme.typography.bodyMedium, color = Nota.Sub, maxLines = 2,
-                overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                modifier = Modifier.weight(1f).padding(start = 12.dp),
-            )
-        } else Column(Modifier.padding(start = 12.dp)) {
-            Text(item.text, style = MaterialTheme.typography.titleMedium, color = Nota.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (item.description.isNotBlank()) Text(
-                item.description, style = MaterialTheme.typography.bodySmall, color = Nota.Sub,
-                maxLines = 2, overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
+private fun StatusItemRow(item: ListItem, color: Color, expanded: Boolean, onToggle: () -> Unit, onEdit: () -> Unit) {
+    ListItemCard(
+        item, expanded = expanded, onToggle = onToggle, onEdit = onEdit, background = Nota.Raised,
+        modifier = Modifier.padding(vertical = 4.dp), notesRight = item.notesRight,
+        leading = { Box(Modifier.width(4.dp).height(22.dp).clip(RoundedCornerShape(2.dp)).background(color)) },
+        title = { Text(item.text, style = MaterialTheme.typography.titleMedium, color = Nota.Text, maxLines = if (expanded) 3 else 1, overflow = TextOverflow.Ellipsis) },
+    )
 }
 
 // ------------------------------------------------------------------------ dialogs
@@ -510,6 +506,8 @@ private fun ItemDialog(list: NotaList, item: ListItem, onDismiss: () -> Unit, on
     var text by remember { mutableStateOf(item.text) }
     var description by remember { mutableStateOf(item.description) }
     var notesRight by remember { mutableStateOf(item.notesRight) }
+    var imagePath by remember { mutableStateOf(item.imagePath) }
+    var imageStyle by remember { mutableStateOf(item.imageStyle) }
     var sections by remember { mutableStateOf(item.sections) }
     var dueDay by remember { mutableStateOf(item.dueDay) }
     var dueMinute by remember { mutableStateOf(item.dueMinute) }
@@ -537,12 +535,15 @@ private fun ItemDialog(list: NotaList, item: ListItem, onDismiss: () -> Unit, on
                         Spacer(Modifier.width(8.dp))
                         LayoutIcon(right = true, selected = notesRight) { notesRight = true }
                     }
-                    OutlinedTextField(
-                        value = description, onValueChange = { description = it }, label = { Text("Notes") },
-                        minLines = 2, maxLines = 5,
-                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                        shape = RoundedCornerShape(16.dp), colors = fieldColors(), modifier = Modifier.fillMaxWidth(),
-                    )
+                }
+                OutlinedTextField(
+                    value = description, onValueChange = { description = it }, label = { Text("Notes") },
+                    minLines = 2, maxLines = 8,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    shape = RoundedCornerShape(16.dp), colors = fieldColors(), modifier = Modifier.fillMaxWidth(),
+                )
+                ItemPictureSection(imagePath, imageStyle, onPath = { imagePath = it }, onStyle = { imageStyle = it })
+                if (sectioned) {
                     Text("CATEGORIES", style = Nota.Label, color = Nota.Sub, modifier = Modifier.padding(top = 4.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         list.statuses.forEach { s ->
@@ -587,6 +588,7 @@ private fun ItemDialog(list: NotaList, item: ListItem, onDismiss: () -> Unit, on
                             text = text.trim(), description = description.trim(), notesRight = notesRight, statusId = null,
                             statusIds = list.statuses.map { it.id }.filter { it in sections },
                             dueDay = dueDay, dueMinute = dueMinute, remindBefore = if (dueDay == null) null else remind,
+                            imagePath = imagePath, imageStyle = imageStyle,
                         ),
                     )
                 },
