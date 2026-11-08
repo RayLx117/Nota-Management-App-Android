@@ -63,6 +63,21 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 
+/** Which repeat types show on the calendar, remembered per tab. */
+private object CalendarFilter {
+    val types = listOf(
+        dev.ray.reminders.data.RepeatType.DAILY to "Daily", dev.ray.reminders.data.RepeatType.WEEKLY to "Weekly",
+        dev.ray.reminders.data.RepeatType.MONTHLY to "Monthly", dev.ray.reminders.data.RepeatType.YEARLY to "Yearly",
+        dev.ray.reminders.data.RepeatType.ONCE to "One time",
+    )
+    private fun prefs(ctx: android.content.Context) = ctx.getSharedPreferences("calendar", android.content.Context.MODE_PRIVATE)
+    fun hidden(ctx: android.content.Context, kind: Kind): Set<dev.ray.reminders.data.RepeatType> =
+        prefs(ctx).getStringSet("hidden_$kind", emptySet()).orEmpty()
+            .mapNotNull { n -> dev.ray.reminders.data.RepeatType.entries.firstOrNull { it.name == n } }.toSet()
+    fun save(ctx: android.content.Context, kind: Kind, hidden: Set<dev.ray.reminders.data.RepeatType>) =
+        prefs(ctx).edit().putStringSet("hidden_$kind", hidden.map { it.name }.toSet()).apply()
+}
+
 /** Does [r] go off on [day]? */
 private fun occursOn(r: Reminder, day: LocalDate, zone: ZoneId): Boolean =
     Recurrence.next(r, day.atStartOfDay(zone).minusNanos(1))?.toLocalDate() == day
@@ -96,12 +111,40 @@ fun CalendarScreen(
     val first = month.atDay(1)
     val gridStart = first.minusDays((first.dayOfWeek.value % 7).toLong())
     val cells = (0 until 42).map { gridStart.plusDays(it.toLong()) }
-    val busy = remember(items, month) {
-        cells.filter { d -> items.any { it.enabled && occursOn(it, d, zone) } }.toSet()
+    var hidden by remember { mutableStateOf(CalendarFilter.hidden(ctx, kind)) }
+    var filtering by remember { mutableStateOf(false) }
+    val shown = remember(items, hidden) { items.filter { it.repeat !in hidden } }
+    val busy = remember(shown, month) {
+        cells.filter { d -> shown.any { it.enabled && occursOn(it, d, zone) } }.toSet()
     }
-    val onDay = remember(items, selected) {
-        items.filter { occursOn(it, day, zone) }.sortedBy { it.hour * 60 + it.minute }
+    val onDay = remember(shown, selected) {
+        shown.filter { occursOn(it, day, zone) }.sortedBy { it.hour * 60 + it.minute }
     }
+    if (filtering) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { filtering = false },
+        containerColor = Nota.Shelf,
+        title = { Text("Show on calendar") },
+        text = {
+            Column {
+                CalendarFilter.types.forEach { (type, label) ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable {
+                            hidden = if (type in hidden) hidden - type else hidden + type; CalendarFilter.save(ctx, kind, hidden)
+                        }.padding(horizontal = 4.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(label, color = Nota.Text, fontFamily = Nota.Outfit, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                        androidx.compose.material3.Switch(
+                            checked = type !in hidden,
+                            onCheckedChange = { on -> hidden = if (on) hidden - type else hidden + type; CalendarFilter.save(ctx, kind, hidden) },
+                            colors = notaSwitchColors(),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { filtering = false }) { Text("Done", color = Nota.Mint) } },
+    )
 
     Column(
         Modifier.fillMaxSize().background(Nota.Bg).statusBarsPadding().navigationBarsPadding()
@@ -112,7 +155,14 @@ fun CalendarScreen(
             Text(
                 if (kind == Kind.ALARM) "Alarm calendar" else "Reminder calendar",
                 fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 24.sp, color = Nota.Text,
+                modifier = Modifier.weight(1f),
             )
+            IconButton(onClick = { filtering = true }) {
+                Icon(
+                    androidx.compose.ui.res.painterResource(dev.ray.reminders.R.drawable.ic_filter), contentDescription = "Filter",
+                    tint = if (hidden.isEmpty()) Nota.Sub else Nota.Mint, modifier = Modifier.size(22.dp),
+                )
+            }
         }
 
         // Month card.
