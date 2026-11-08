@@ -9,14 +9,11 @@
         android:text="Open note in app" android:textColor="#FF2EE59D" android:textSize="13sp"
         android:fontFamily="@font/outfit_semibold" />
 
-    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
-        android:orientation="horizontal" android:gravity="center_vertical">
-        <TextView android:id="@+id/field" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:minHeight="52dp" android:background="@drawable/widget_chip" android:gravity="center_vertical"
-            android:paddingStart="14dp" android:paddingEnd="14dp" android:text="Write a note…"
-            android:textColor="#FF8E9AB8" android:textSize="15sp" android:fontFamily="@font/outfit_semibold" />
-        <ImageView android:id="@+id/save" android:layout_width="60dp" android:layout_height="60dp"
-            android:layout_marginStart="10dp" android:padding="15dp" android:src="@drawable/ic_check"
-            android:background="@drawable/widget_circle" android:contentDescription="Save note" />
-    </LinearLayout>
+    <!-- A big pencil: tap to write a note in the popup. -->
+    <FrameLayout android:id="@+id/write_area" android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1">
+        <ImageView android:id="@+id/write" android:layout_width="64dp" android:layout_height="64dp"
+            android:layout_gravity="center" android:padding="17dp" android:src="@drawable/ic_edit"
+            android:background="@drawable/widget_circle" android:contentDescription="Write a note" />
+    </FrameLayout>
 </LinearLayout>
