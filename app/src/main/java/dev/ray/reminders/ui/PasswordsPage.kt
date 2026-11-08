@@ -316,6 +316,8 @@ private fun ScanningScreen(onUsePin: () -> Unit) {
         Spacer(Modifier.height(40.dp))
         Text("Scanning", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, color = Nota.Text)
         Text("Hold your finger on the sensor", style = MaterialTheme.typography.bodyMedium, color = Nota.Sub, modifier = Modifier.padding(top = 6.dp))
+        // Up here, well away from the sensor, so a quick second tap doesn't hit it.
+        TextButton(onClick = onUsePin, modifier = Modifier.padding(top = 10.dp)) { Text("Use PIN instead", color = Nota.Mint) }
         Spacer(Modifier.weight(1f))
         Box(Modifier.size(220.dp), contentAlignment = Alignment.Center) {
             // Two rings rippling outward, half a beat apart.
@@ -335,7 +337,6 @@ private fun ScanningScreen(onUsePin: () -> Unit) {
             }
         }
         Spacer(Modifier.weight(1f))
-        TextButton(onClick = onUsePin, modifier = Modifier.padding(bottom = 28.dp)) { Text("Use PIN instead", color = Nota.Mint) }
     }
 }
 
