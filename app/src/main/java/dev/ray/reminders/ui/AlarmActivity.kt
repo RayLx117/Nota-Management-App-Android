@@ -134,6 +134,18 @@ class AlarmActivity : ComponentActivity() {
         }
     }
 
+    /** Volume down while the alarm screen is up: snooze (and don't change the volume). */
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean {
+        if (keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN) {
+            val id = intent.getIntExtra(ReminderEngine.EXTRA_ID, -1)
+            if (event.repeatCount == 0 && id >= 0 && ReminderStore.get(this).get(id)?.isActive == true) {
+                ReminderEngine.snooze(this, id, fromAlarm = true)
+            }
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
     companion object {
         fun intent(ctx: Context, id: Int): Intent = Intent(ctx, AlarmActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION)
