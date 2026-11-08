@@ -24,6 +24,7 @@ object Sounds {
 
     private var flow: MutableStateFlow<List<Sound>>? = null
     private var defaultFlow: MutableStateFlow<String>? = null
+    private var timerDefaultFlow: MutableStateFlow<String>? = null
 
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("sounds", Context.MODE_PRIVATE)
     private fun dir(ctx: Context) = File(ctx.filesDir, "sounds").apply { mkdirs() }
@@ -43,7 +44,16 @@ object Sounds {
         (all(ctx) as MutableStateFlow).value = listOf(SYSTEM_SOUND) + list.filter { it.id != SYSTEM }
     }
 
-    /** The sound new alarms and timers start with (Settings > Alarm sounds). */
+    /** The sound new timers and presets start with (Settings > Alarm sounds). */
+    fun timerDefault(ctx: Context): StateFlow<String> =
+        timerDefaultFlow ?: MutableStateFlow(prefs(ctx).getString("timerDefault", null) ?: default(ctx).value).also { timerDefaultFlow = it }
+
+    fun setTimerDefault(ctx: Context, id: String) {
+        prefs(ctx).edit().putString("timerDefault", id).apply()
+        (timerDefault(ctx) as MutableStateFlow).value = id
+    }
+
+    /** The sound new alarms start with (Settings > Alarm sounds). */
     fun default(ctx: Context): StateFlow<String> =
         defaultFlow ?: MutableStateFlow(prefs(ctx).getString("default", SYSTEM) ?: SYSTEM).also { defaultFlow = it }
 
@@ -53,17 +63,18 @@ object Sounds {
     }
 
     /** A sound id that still exists: missing ones fall back to the default, then the phone alarm. */
-    fun resolve(ctx: Context, id: String?): String {
+    fun resolve(ctx: Context, id: String?, timer: Boolean = false): String {
         val ids = all(ctx).value.map { it.id }
+        val fallback = if (timer) timerDefault(ctx).value else default(ctx).value
         return when {
             id != null && id in ids -> id
-            default(ctx).value in ids -> default(ctx).value
+            fallback in ids -> fallback
             else -> SYSTEM
         }
     }
 
-    fun name(ctx: Context, id: String?): String {
-        val r = resolve(ctx, id)
+    fun name(ctx: Context, id: String?, timer: Boolean = false): String {
+        val r = resolve(ctx, id, timer)
         return all(ctx).value.firstOrNull { it.id == r }?.name ?: SYSTEM_SOUND.name
     }
 
@@ -95,6 +106,7 @@ object Sounds {
         if (id.startsWith("file:")) File(dir(ctx), id.removePrefix("file:")).delete()
         save(ctx, all(ctx).value.filter { it.id != id })
         if (default(ctx).value == id) setDefault(ctx, SYSTEM)
+        if (timerDefault(ctx).value == id) setTimerDefault(ctx, SYSTEM)
     }
 
     /** What MediaPlayer should open for a sound id. */

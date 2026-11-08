@@ -97,6 +97,7 @@ fun SettingsScreen(visible: Boolean) {
 private fun Categories(onOpen: (SettingsPage) -> Unit) {
     val ctx = LocalContext.current
     val default by Sounds.default(ctx).collectAsState()
+    val timerDefault by Sounds.timerDefault(ctx).collectAsState()
     val sounds by Sounds.all(ctx).collectAsState()
     val palette = ThemeStore.palette
     val themeName = ThemeStore.presets.firstOrNull { it.second == palette }?.first ?: "Custom"
@@ -122,7 +123,7 @@ private fun Categories(onOpen: (SettingsPage) -> Unit) {
             )
             CategoryRow(
                 icon = { Icon(painterResource(R.drawable.ic_tab_alarm), null, tint = Nota.Mint, modifier = Modifier.size(24.dp)) },
-                title = "Alarm sounds", value = remember(default, sounds) { Sounds.name(ctx, default) },
+                title = "Alarm sounds", value = remember(default, timerDefault, sounds) { "Alarms: ${Sounds.name(ctx, default)} · Timers: ${Sounds.name(ctx, timerDefault, timer = true)}" },
                 onClick = { onOpen(SettingsPage.SOUNDS) },
             )
             var refresh by remember { androidx.compose.runtime.mutableIntStateOf(0) }
@@ -312,9 +313,13 @@ private fun GradientSlider(value: Float, onChange: (Float) -> Unit, brush: Brush
 private fun SoundsPage() {
     val ctx = LocalContext.current
     val default by Sounds.default(ctx).collectAsState()
+    val timerDefault by Sounds.timerDefault(ctx).collectAsState()
     var removing by remember { mutableStateOf<Sound?>(null) }
-    Label("DEFAULT FOR NEW ALARMS AND TIMERS")
-    SoundList(Sounds.resolve(ctx, default), onSelect = { Sounds.setDefault(ctx, it) }, onDelete = { removing = it })
+    Label("DEFAULT SOUNDS")
+    AudioRow(default, onPick = { Sounds.setDefault(ctx, it) }, label = "New alarms")
+    AudioRow(timerDefault, onPick = { Sounds.setTimerDefault(ctx, it) }, timer = true, label = "Timers")
+    Label("YOUR SOUNDS")
+    SoundList(null, onSelect = { }, onDelete = { removing = it })
     Spacer(Modifier.height(4.dp))
     AddSoundButtons(onAdded = { })
     removing?.let { s ->

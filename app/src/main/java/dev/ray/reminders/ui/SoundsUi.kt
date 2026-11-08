@@ -93,7 +93,7 @@ fun rememberSoundAdder(onAdded: (Sound) -> Unit): SoundAdder {
 
 /** Every sound, with a play button to hear it and a dot on the selected one. */
 @Composable
-fun SoundList(selected: String, onSelect: (String) -> Unit, onDelete: ((Sound) -> Unit)? = null) {
+fun SoundList(selected: String?, onSelect: (String) -> Unit, onDelete: ((Sound) -> Unit)? = null) {
     val ctx = LocalContext.current
     val sounds by Sounds.all(ctx).collectAsState()
     var playing by remember { mutableStateOf<String?>(null) }
@@ -106,7 +106,7 @@ fun SoundList(selected: String, onSelect: (String) -> Unit, onDelete: ((Sound) -
                     .clickable { onSelect(s.id) }.padding(start = 14.dp, end = 4.dp).heightIn(min = 52.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
+                if (selected != null) Box(
                     Modifier.size(20.dp).clip(CircleShape)
                         .then(if (on) Modifier.background(Nota.Mint) else Modifier.border(2.dp, Nota.Outline, CircleShape)),
                     contentAlignment = Alignment.Center,
@@ -142,11 +142,18 @@ fun AddSoundButtons(onAdded: (Sound) -> Unit) {
 
 /** "Sound  ·  Phone alarm  >" row for an alarm or timer; opens the sound picker. */
 @Composable
-fun AudioRow(sound: String?, onPick: (String) -> Unit, enabled: Boolean = true, modifier: Modifier = Modifier) {
+fun AudioRow(
+    sound: String?, onPick: (String) -> Unit, enabled: Boolean = true, modifier: Modifier = Modifier,
+    /** Fall back to the timer default instead of the alarm default. */
+    timer: Boolean = false,
+    /** Optional label in front of the sound's name. */
+    label: String? = null,
+) {
     val ctx = LocalContext.current
     val sounds by Sounds.all(ctx).collectAsState()
     val default by Sounds.default(ctx).collectAsState()
-    val name = remember(sound, sounds, default) { Sounds.name(ctx, sound) }
+    val timerDefault by Sounds.timerDefault(ctx).collectAsState()
+    val name = remember(sound, sounds, default, timerDefault) { Sounds.name(ctx, sound, timer) }
     var open by remember { mutableStateOf(false) }
     Row(
         modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.4f).clip(RoundedCornerShape(14.dp)).background(Nota.Raised)
@@ -155,13 +162,14 @@ fun AudioRow(sound: String?, onPick: (String) -> Unit, enabled: Boolean = true, 
     ) {
         Icon(painterResource(R.drawable.ic_music), null, tint = Nota.Mint, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
+        if (label != null) Text(label, color = Nota.Sub, fontFamily = Nota.Outfit, fontSize = 16.sp, modifier = Modifier.padding(end = 10.dp))
         Text(
             name, color = Nota.Text, fontFamily = Nota.Outfit, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
         Icon(Icons.Filled.KeyboardArrowRight, null, tint = Nota.Sub)
     }
-    if (open) SoundPickerDialog(Sounds.resolve(ctx, sound), onPick = { onPick(it); open = false }, onDismiss = { open = false })
+    if (open) SoundPickerDialog(Sounds.resolve(ctx, sound, timer), onPick = { onPick(it); open = false }, onDismiss = { open = false })
 }
 
 @Composable

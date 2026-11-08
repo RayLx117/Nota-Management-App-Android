@@ -268,11 +268,11 @@ private fun TimerSetup() {
             options = listOf(AlertStyle.SOUND_AND_VIBRATE, AlertStyle.VIBRATE_ONLY),
             onPick = { vibrateOnly = it == AlertStyle.VIBRATE_ONLY; Timer.setVibrateOnly(ctx, vibrateOnly) },
         )
-        AudioRow(sound, onPick = { sound = it }, enabled = !vibrateOnly)
+        AudioRow(sound, onPick = { sound = it }, enabled = !vibrateOnly, timer = true)
 
         Spacer(Modifier.weight(1f))
         PrimaryButton(
-            "Start", onClick = { Timer.start(ctx, total, label, Sounds.resolve(ctx, sound)) },
+            "Start", onClick = { Timer.start(ctx, total, label, Sounds.resolve(ctx, sound, timer = true)) },
             modifier = Modifier.fillMaxWidth().alpha(if (total > 0) 1f else 0.4f),
         )
     }
@@ -330,7 +330,7 @@ private fun PresetsDialog(presets: List<TimerPreset>, currentSeconds: Int, curre
     var soundFor by remember { mutableStateOf<Int?>(null) }
     soundFor?.let { i ->
         presets.getOrNull(i)?.let { p ->
-            SoundPickerDialog(Sounds.resolve(ctx, p.sound), onPick = { id ->
+            SoundPickerDialog(Sounds.resolve(ctx, p.sound, timer = true), onPick = { id ->
                 Timer.setPresets(ctx, presets.mapIndexed { j, q -> if (j == i) q.copy(sound = id) else q })
                 soundFor = null
             }, onDismiss = { soundFor = null })
@@ -358,7 +358,7 @@ private fun PresetsDialog(presets: List<TimerPreset>, currentSeconds: Int, curre
                             ) {
                                 Icon(painterResource(dev.ray.reminders.R.drawable.ic_music), null, tint = Nota.Mint, modifier = Modifier.size(14.dp))
                                 Text(
-                                    Sounds.name(ctx, p.sound), color = Nota.Mint, fontSize = 13.sp, maxLines = 1,
+                                    Sounds.name(ctx, p.sound, timer = true), color = Nota.Mint, fontSize = 13.sp, maxLines = 1,
                                     modifier = Modifier.padding(start = 4.dp),
                                 )
                             }
@@ -373,7 +373,7 @@ private fun PresetsDialog(presets: List<TimerPreset>, currentSeconds: Int, curre
                 SoftButton(
                     if (canSave) "Save " + (currentName.trim().ifBlank { Timer.shortDuration(currentSeconds) }) + " as a preset"
                     else "Set a time to save it as a preset",
-                    onClick = { if (canSave) Timer.setPresets(ctx, presets + TimerPreset(currentName.trim(), currentSeconds, Sounds.resolve(ctx, currentSound))) },
+                    onClick = { if (canSave) Timer.setPresets(ctx, presets + TimerPreset(currentName.trim(), currentSeconds, Sounds.resolve(ctx, currentSound, timer = true))) },
                     color = if (canSave) Nota.Mint else Nota.Sub, height = 46.dp, modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
