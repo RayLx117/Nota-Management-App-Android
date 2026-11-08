@@ -80,6 +80,8 @@ fun ListItemCard(
     val picture = remember(item.imagePath) { item.imagePath?.let(Images::load)?.asImageBitmap() }
     val hasNotes = item.description.isNotBlank()
     val expandable = hasNotes || picture != null
+    // Nothing left to show (e.g. its notes were just removed): back to a plain compact item.
+    @Suppress("NAME_SHADOWING") val expanded = expanded && expandable
     val arrow by animateFloatAsState(if (expanded) 180f else 0f, label = "arrow")
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(background)
