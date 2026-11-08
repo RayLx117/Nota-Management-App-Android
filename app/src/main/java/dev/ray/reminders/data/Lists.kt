@@ -69,6 +69,29 @@ class ListsStore private constructor(private val ctx: Context, private val file:
     private val _lists = MutableStateFlow(load())
     val lists: StateFlow<List<NotaList>> = _lists.asStateFlow()
 
+    /** Hand-arranged order of the lists: [ids] first to last. */
+    fun arrange(ids: List<Int>) = mutate { l -> ids.mapNotNull { id -> l.firstOrNull { it.id == id } } + l.filter { it.id !in ids } }
+
+    /** A checklist's items in a new order. */
+    fun arrangeItems(listId: Int, ids: List<Int>) = update(listId) { l ->
+        l.copy(items = ids.mapNotNull { id -> l.items.firstOrNull { it.id == id } } + l.items.filter { it.id !in ids })
+    }
+
+    /**
+     * Categorized lists: moves an item out of category [from] (null = no category) into [to],
+     * placed just before [before] (or at the end of that category).
+     */
+    fun moveItem(listId: Int, itemId: Int, from: Int?, to: Int, before: Int?) = update(listId) { l ->
+        val item = l.items.firstOrNull { it.id == itemId } ?: return@update l
+        val secs = (item.sections - setOfNotNull(from) + to).let { set -> l.statuses.map { it.id }.filter { it in set } }
+        val moved = item.copy(statusId = null, statusIds = secs)
+        val rest = l.items.filter { it.id != itemId }.toMutableList()
+        val at = before?.let { b -> rest.indexOfFirst { it.id == b } }?.takeIf { it >= 0 }
+            ?: (rest.indexOfLast { to in it.sections } + 1).takeIf { it > 0 } ?: rest.size
+        rest.add(at, moved)
+        l.copy(items = rest)
+    }
+
     fun create(name: String, type: ListType): Int {
         val id = (_lists.value.maxOfOrNull { it.id } ?: 0) + 1
         mutate { it + NotaList(id, name, type) }

@@ -74,6 +74,8 @@ fun ListItemCard(
     modifier: Modifier = Modifier,
     /** Notes beside the name instead of below it (categorized lists). */
     notesRight: Boolean = false,
+    /** The caller handles taps itself (e.g. hold-to-arrange): don't add a click here. */
+    tapHandled: Boolean = false,
     leading: @Composable RowScope.() -> Unit = {},
     title: @Composable () -> Unit,
     extra: @Composable () -> Unit = {},
@@ -86,7 +88,7 @@ fun ListItemCard(
     val arrow by animateFloatAsState(if (expanded) 180f else 0f, label = "arrow")
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(background)
-            .clickable { if (expandable) onToggle() else onEdit() }.animateContentSize(),
+            .then(if (tapHandled) Modifier else Modifier.clickable { if (expandable) onToggle() else onEdit() }).animateContentSize(),
     ) {
         if (picture != null && item.imageStyle == ListImageStyle.BANNER && !expanded) Image(
             picture, contentDescription = null, contentScale = ContentScale.Crop,
@@ -177,3 +179,7 @@ fun ItemPictureSection(path: String?, style: ListImageStyle, query: String, onPa
         TextButton(onClick = { onPath(null) }) { Text("Remove", color = Nota.Sub) }
     }
 }
+
+/** What tapping a list item does: open it up if there's more to see, else edit it. */
+fun ListItem.tap(onToggle: () -> Unit, onEdit: () -> Unit) =
+    if (description.isNotBlank() || imagePath != null) onToggle() else onEdit()

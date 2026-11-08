@@ -132,6 +132,7 @@ fun Modifier.arrangeable(
         .pointerInput(id, enabled) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
+                HoldGuard.claim(down.uptimeMillis)
                 // Already wobbling: no need to hold again, just drag it (or tap to toggle).
                 if (sel.active && enabled) {
                     val first = awaitTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
@@ -177,3 +178,29 @@ fun Modifier.arrangeable(
             }
         }
 }
+
+/**
+ * Lets a container tell whether a long press landed on one of its own arrangeable items
+ * (which handle it themselves) or on an empty spot.
+ */
+object HoldGuard {
+    @Volatile private var claimedAt = -1L
+    fun claim(downTime: Long) { claimedAt = downTime }
+    fun claimed(downTime: Long) = claimedAt == downTime
+}
+
+/** Press and hold on an empty spot (not on an item that handles its own hold). */
+fun Modifier.holdOnEmpty(onHold: () -> Unit): Modifier = pointerInput(Unit) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        var ended = false
+        withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+            waitForUpOrCancellation()
+            ended = true
+        }
+        if (!ended && !HoldGuard.claimed(down.uptimeMillis)) onHold()
+    }
+}
+
+/** A selection that's always "on", for arranging where nothing gets selected (lists, categories). */
+fun alwaysArranging() = Selection({ setOf(Int.MIN_VALUE) }, {})

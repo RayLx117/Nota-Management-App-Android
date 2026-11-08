@@ -1,5 +1,6 @@
 package dev.ray.reminders.ui
 
+import androidx.compose.foundation.layout.width
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipDescription
@@ -257,28 +258,31 @@ private fun ForgotPinDialog(onDismiss: () -> Unit, onErase: () -> Unit) = AlertD
     dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Nota.Sub) } },
 )
 
-/** "Unlock with": PIN or Fingerprint, side by side. */
+/** "Unlock with": PIN in the middle; the fingerprint is a circle low down, roughly over the phone's sensor. */
 @Composable
 private fun UnlockChooser(message: String?, onPin: () -> Unit, onFingerprint: () -> Unit, onForgot: () -> Unit) {
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(Modifier.height(48.dp))
         Icon(painterResource(R.drawable.ic_lock), contentDescription = null, tint = Nota.Mint, modifier = Modifier.size(34.dp))
         Text(
             "Unlock with", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, color = Nota.Text,
             modifier = Modifier.padding(top = 10.dp, bottom = 24.dp),
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            UnlockOption("PIN", R.drawable.ic_dialpad, Modifier.weight(1f), onPin)
-            UnlockOption("Fingerprint", R.drawable.ic_fingerprint, Modifier.weight(1f), onFingerprint)
-        }
+        UnlockOption("PIN", R.drawable.ic_dialpad, Modifier.width(170.dp), onPin)
         if (message != null) Text(
             message, style = MaterialTheme.typography.bodySmall, color = Nota.Error, textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 16.dp),
         )
-        TextButton(onClick = onForgot, modifier = Modifier.padding(top = 20.dp)) { Text("Forgot PIN?", color = Nota.Sub) }
+        TextButton(onClick = onForgot, modifier = Modifier.padding(top = 16.dp)) { Text("Forgot PIN?", color = Nota.Sub) }
+        Spacer(Modifier.weight(1f))
+        Box(
+            Modifier.size(78.dp).clip(CircleShape).background(Nota.Shelf).border(2.dp, Nota.Mint.copy(alpha = 0.5f), CircleShape)
+                .clickable(onClick = onFingerprint),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(painterResource(R.drawable.ic_fingerprint), contentDescription = "Unlock with fingerprint", tint = Nota.Mint, modifier = Modifier.size(38.dp))
+        }
+        Spacer(Modifier.height(120.dp))
     }
 }
 

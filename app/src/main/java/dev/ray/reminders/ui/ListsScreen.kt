@@ -1,5 +1,14 @@
 package dev.ray.reminders.ui
 
+import androidx.compose.material.icons.filled.Menu
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -98,6 +107,7 @@ fun ListsScreen() {
     val scope = rememberCoroutineScope()
     var creating by remember { mutableStateOf(false) }
     var jumpTo by remember { mutableStateOf<Int?>(null) }
+    var arrangingLists by remember { mutableStateOf(false) }
 
     // Opened from a widget: go straight to that list.
     val requested by ListsNav.open.collectAsState()
@@ -116,6 +126,10 @@ fun ListsScreen() {
 
     Column(Modifier.fillMaxSize().background(Nota.Bg).statusBarsPadding()) {
         PageHeader("Lists", Modifier.padding(horizontal = 16.dp))
+        if (arrangingLists) {
+            ArrangeLists(lists, store, Modifier.weight(1f)) { arrangingLists = false }
+            return@Column
+        }
         HorizontalPager(
             pager,
             // The open list fills almost the whole width; only a sliver of its neighbours shows.
@@ -124,7 +138,7 @@ fun ListsScreen() {
             modifier = Modifier.weight(1f).padding(top = 4.dp),
         ) { page ->
             val list = lists.getOrNull(page)
-            if (list == null) NewListCard { creating = true } else ListCard(list, store)
+            if (list == null) NewListCard { creating = true } else ListCard(list, store, onArrange = { arrangingLists = true })
         }
         // Where you are among your lists.
         Row(
@@ -157,8 +171,8 @@ fun ListsScreen() {
 }
 
 @Composable
-private fun CardFrame(content: @Composable () -> Unit) {
-    Box(Modifier.fillMaxSize().clip(RoundedCornerShape(28.dp)).background(Nota.Shelf)) { content() }
+private fun CardFrame(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Box(modifier.fillMaxSize().clip(RoundedCornerShape(28.dp)).background(Nota.Shelf)) { content() }
 }
 
 @Composable
@@ -178,10 +192,65 @@ private fun NewListCard(onClick: () -> Unit) {
     }
 }
 
+/** Every list as a wobbling tile: drag them into a new order. */
+@Composable
+private fun ArrangeLists(lists: List<NotaList>, store: ListsStore, modifier: Modifier, onDone: () -> Unit) {
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    LaunchedEffect(Unit) { haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress) }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val arrange = rememberArrangeState(listState)
+    val wobble = rememberWobble()
+    val sel = remember { alwaysArranging() }
+    val displayed = arrange.order?.mapNotNull { id -> lists.firstOrNull { it.id == id } } ?: lists
+    BackHandler(onBack = onDone)
+    Column(modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+        Row(Modifier.fillMaxWidth().padding(start = 6.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Drag lists to reorder", style = MaterialTheme.typography.bodyMedium, color = Nota.Sub, modifier = Modifier.weight(1f))
+            TextButton(onClick = onDone) { Text("Done", color = Nota.Mint) }
+        }
+        LazyColumn(
+            Modifier.fillMaxSize(), state = listState, verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(top = 6.dp, bottom = 24.dp),
+        ) {
+            items(displayed, key = { it.id }) { l ->
+                val dragging = arrange.dragging == l.id
+                Row(
+                    (if (dragging) Modifier else Modifier.animateItem())
+                        .arrangeable(
+                            arrange, sel, l.id, true, wobble,
+                            order = { displayed.map { it.id } }, canSwap = { _, _ -> true }, onOpen = {},
+                            onDrop = { d -> if (d.moved) store.arrange(d.order) },
+                        )
+                        .fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Nota.Shelf)
+                        .border(1.dp, if (dragging) Nota.Mint else Nota.Outline.copy(alpha = 0.5f), RoundedCornerShape(22.dp))
+                        .padding(horizontal = 18.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            if (l.type == ListType.CHECKLIST) "CHECKLIST" else "CATEGORIZED LIST",
+                            style = Nota.Label, color = Nota.Sub,
+                        )
+                        Text(
+                            l.name, fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp,
+                            color = Nota.Text, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            "${l.items.size} item" + if (l.items.size == 1) "" else "s",
+                            style = MaterialTheme.typography.bodySmall, color = Nota.Sub,
+                        )
+                    }
+                    Icon(Icons.Filled.Menu, contentDescription = null, tint = Nota.Sub)
+                }
+            }
+        }
+    }
+}
+
 // ------------------------------------------------------------------------ one list
 
 @Composable
-private fun ListCard(list: NotaList, store: ListsStore) {
+private fun ListCard(list: NotaList, store: ListsStore, onArrange: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -189,7 +258,8 @@ private fun ListCard(list: NotaList, store: ListsStore) {
     // Status list item dialog: null = closed; id 0 = new item.
     var editingItem by remember { mutableStateOf<ListItem?>(null) }
 
-    CardFrame {
+    // Holding an empty spot or the edge of the card (not an item) picks the lists up to reorder them.
+    CardFrame(Modifier.holdOnEmpty(onArrange)) {
         Column(Modifier.fillMaxSize().padding(top = 16.dp)) {
             Row(Modifier.padding(start = 18.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -232,7 +302,7 @@ private fun ListCard(list: NotaList, store: ListsStore) {
                 when (list.type) {
                     ListType.CHECKLIST -> ChecklistBody(list, store)
                     ListType.STATUS -> StatusBody(
-                        list,
+                        list, store,
                         onEditStatuses = { editingStatuses = true },
                         onAdd = { section -> editingItem = ListItem(0, "", statusIds = listOf(section)) },
                         onOpen = { editingItem = it },
@@ -278,8 +348,16 @@ private fun ChecklistBody(list: NotaList, store: ListsStore) {
         if (draft.isNotBlank()) store.addItem(list.id, ListItem(0, draft.trim()))
         draft = ""
     }
+    // Hold an item to wobble: drag to reorder, tap to select, trash to delete.
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val arrange = rememberArrangeState(listState)
+    val wobble = rememberWobble()
+    val sel = rememberSelection(list.items.map { it.id }.toSet())
+    val ordered = list.items.filterNot { it.checked } + list.items.filter { it.checked }
+    val displayed = arrange.order?.let { o -> o.mapNotNull { id -> ordered.firstOrNull { it.id == id } } } ?: ordered
     Column {
-        Row(Modifier.padding(top = 12.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (sel.active) SelectionBar(sel, "item", onDelete = { ids -> ids.forEach { store.deleteItem(list.id, it) } })
+        else Row(Modifier.padding(top = 12.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = draft, onValueChange = { draft = it }, singleLine = true,
                 placeholder = { Text("Add item", color = Nota.Sub) },
@@ -295,18 +373,26 @@ private fun ChecklistBody(list: NotaList, store: ListsStore) {
                 Icon(Icons.Filled.Add, contentDescription = "Add", tint = if (draft.isBlank()) Nota.Sub else Nota.Ink)
             }
         }
-        val ordered = list.items.filterNot { it.checked } + list.items.filter { it.checked }
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
-            items(ordered, key = { it.id }) { item ->
+        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 16.dp)) {
+            items(displayed, key = { it.id }) { item ->
                 val ctx = LocalContext.current
+                val toggle = { open = if (item.id in open) open - item.id else open + item.id }
                 ListItemCard(
                     item, expanded = item.id in open,
-                    onToggle = { open = if (item.id in open) open - item.id else open + item.id },
-                    onEdit = { editing = item }, background = Nota.Shelf,
-                    modifier = Modifier.animateItem().padding(vertical = 2.dp),
+                    onToggle = toggle,
+                    onEdit = { editing = item }, background = Nota.Shelf, tapHandled = true,
+                    modifier = (if (arrange.dragging == item.id) Modifier else Modifier.animateItem()).arrangeable(
+                        arrange, sel, item.id, enabled = true, wobble = wobble,
+                        order = { displayed.map { it.id } },
+                        // Ticked items stay below unticked ones.
+                        canSwap = { a, b -> list.items.firstOrNull { it.id == a }?.checked == list.items.firstOrNull { it.id == b }?.checked },
+                        onOpen = { item.tap(toggle) { editing = item } },
+                        onDrop = { d -> if (d.moved) store.arrangeItems(list.id, d.order) },
+                    ).padding(vertical = 2.dp),
                     leading = {
                         // The circle checks it off; the rest of the row opens it.
-                        SelectCircle(
+                        if (sel.active) SelectCircle(sel.has(item.id), Modifier.padding(end = 2.dp))
+                        else SelectCircle(
                             item.checked,
                             Modifier.clip(CircleShape).clickable { store.updateItem(list.id, item.copy(checked = !item.checked)) },
                         )
@@ -344,9 +430,40 @@ private fun ChecklistBody(list: NotaList, store: ListsStore) {
 
 private val SECTION_COLORS get() = listOf(Nota.Mint, Nota.Cyan, Nota.Violet, Nota.Amber, Nota.Pink)
 
+/** Dragging an item between categories: where it came from, where the finger is, and where it would land. */
+private class CategoryDrag {
+    var arranging by mutableStateOf(false)
+    /** (category it was picked up from, or null for "No category"; item id) */
+    var dragging by mutableStateOf<Pair<Int?, Int>?>(null)
+    var pointer by mutableStateOf(androidx.compose.ui.geometry.Offset.Zero)
+    var grab = androidx.compose.ui.geometry.Offset.Zero
+    var ghostWidth = 0
+    /** (category, insert before this item or null = at the end) */
+    var target by mutableStateOf<Pair<Int, Int?>?>(null)
+    val sections = mutableMapOf<Int, androidx.compose.ui.geometry.Rect>()
+    val items = mutableMapOf<Pair<Int?, Int>, androidx.compose.ui.geometry.Rect>()
+    var body = androidx.compose.ui.geometry.Rect.Zero
+
+    fun start(key: Pair<Int?, Int>, local: androidx.compose.ui.geometry.Offset) {
+        val r = items[key] ?: return
+        grab = local; pointer = r.topLeft + local; ghostWidth = r.width.toInt(); dragging = key
+        aim()
+    }
+
+    fun aim() {
+        val p = pointer
+        val sec = sections.entries.firstOrNull { it.value.contains(p) }?.key
+        target = sec?.let { s ->
+            s to items.entries.filter { it.key.first == s && it.key != dragging }.sortedBy { it.value.top }
+                .firstOrNull { it.value.center.y > p.y }?.key?.second
+        }
+    }
+}
+
 @Composable
 private fun StatusBody(
     list: NotaList,
+    store: ListsStore,
     onEditStatuses: () -> Unit,
     onAdd: (Int) -> Unit,
     onOpen: (ListItem) -> Unit,
@@ -362,34 +479,87 @@ private fun StatusBody(
     val known = list.statuses.map { it.id }.toSet()
     val loose = list.items.filter { it.sections.none { id -> id in known } }
     var open by remember { mutableStateOf(setOf<String>()) }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = 20.dp)) {
-        list.statuses.forEachIndexed { i, section ->
-            val color = SECTION_COLORS[i % SECTION_COLORS.size]
-            item(key = "s${section.id}") {
-                SectionBox(section.name, color, list.items.filter { section.id in it.sections }, "s${section.id}", open, { open = it }, onOpen) { onAdd(section.id) }
+    val drag = remember { CategoryDrag() }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val wobble = rememberWobble()
+    if (drag.arranging) BackHandler { drag.arranging = false }
+    fun drop() {
+        val (from, id) = drag.dragging ?: return
+        drag.target?.let { (to, before) -> store.moveItem(list.id, id, from, to, before) }
+        drag.dragging = null; drag.target = null
+    }
+    Box(Modifier.fillMaxSize().onGloballyPositioned { drag.body = it.boundsInRoot() }) {
+        Column(Modifier.fillMaxSize()) {
+            if (drag.arranging) Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Drag items between categories", style = MaterialTheme.typography.bodyMedium, color = Nota.Sub,
+                    modifier = Modifier.weight(1f).padding(start = 6.dp),
+                )
+                TextButton(onClick = { drag.arranging = false }) { Text("Done", color = Nota.Mint) }
+            }
+            LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(top = 8.dp, bottom = 20.dp)) {
+                list.statuses.forEachIndexed { i, section ->
+                    val color = SECTION_COLORS[i % SECTION_COLORS.size]
+                    item(key = "s${section.id}") {
+                        SectionBox(
+                            section.name, color, list.items.filter { section.id in it.sections }, section.id, drag, wobble, listState,
+                            open, { open = it }, onOpen, ::drop,
+                        ) { onAdd(section.id) }
+                    }
+                }
+                if (loose.isNotEmpty()) item(key = "none") {
+                    SectionBox("No category", Nota.Outline, loose, null, drag, wobble, listState, open, { open = it }, onOpen, ::drop, onAdd = null)
+                }
             }
         }
-        if (loose.isNotEmpty()) item(key = "none") { SectionBox("No category", Nota.Outline, loose, "none", open, { open = it }, onOpen, onAdd = null) }
+        // The picked-up item follows the finger.
+        drag.dragging?.let { (_, id) ->
+            val item = list.items.firstOrNull { it.id == id } ?: return@let
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            val pos = drag.pointer - drag.grab - drag.body.topLeft
+            Box(
+                Modifier.offset { androidx.compose.ui.unit.IntOffset(pos.x.toInt(), pos.y.toInt()) }
+                    .width(with(density) { drag.ghostWidth.toDp() })
+                    .graphicsLayer { scaleX = 1.04f; scaleY = 1.04f; shadowElevation = 24f; rotationZ = -1.5f },
+            ) {
+                ListItemCard(
+                    item, expanded = false, onToggle = {}, onEdit = {}, background = Nota.Raised, tapHandled = true,
+                    leading = { Box(Modifier.width(4.dp).height(22.dp).clip(RoundedCornerShape(2.dp)).background(Nota.Mint)) },
+                    title = { Text(item.text, style = MaterialTheme.typography.titleMedium, color = Nota.Text, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                )
+            }
+        }
     }
 }
 
 /** A thin rounded outline with the section's name sitting in a gap at the top centre, and + at the bottom. */
 @Composable
 private fun SectionBox(
-    name: String, color: Color, items: List<ListItem>, key: String, open: Set<String>, setOpen: (Set<String>) -> Unit,
-    onOpen: (ListItem) -> Unit, onAdd: (() -> Unit)?,
+    name: String, color: Color, items: List<ListItem>, sectionId: Int?, drag: CategoryDrag, wobble: androidx.compose.runtime.State<Float>,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    open: Set<String>, setOpen: (Set<String>) -> Unit, onOpen: (ListItem) -> Unit, onDrop: () -> Unit, onAdd: (() -> Unit)?,
 ) {
+    val key = sectionId?.let { "s$it" } ?: "none"
+    val targeted = sectionId != null && drag.target?.first == sectionId
+    if (sectionId != null) androidx.compose.runtime.DisposableEffect(sectionId) { onDispose { drag.sections.remove(sectionId) } }
     Box(Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 4.dp)) {
         Column(
-            Modifier.fillMaxWidth().border(1.5.dp, color.copy(alpha = 0.75f), RoundedCornerShape(22.dp))
+            Modifier.fillMaxWidth()
+                .then(if (sectionId != null) Modifier.onGloballyPositioned { drag.sections[sectionId] = it.boundsInRoot() } else Modifier)
+                .border(if (targeted) 2.5.dp else 1.5.dp, color.copy(alpha = if (targeted) 1f else 0.75f), RoundedCornerShape(22.dp))
                 .padding(start = 8.dp, end = 8.dp, top = 20.dp, bottom = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             items.forEach { item ->
+                if (targeted && drag.target?.second == item.id) DropLine(color)
                 // The same item can sit in several categories, so each spot opens on its own.
                 val k = "$key/${item.id}"
-                StatusItemRow(item, color, expanded = k in open, onToggle = { setOpen(if (k in open) open - k else open + k) }) { onOpen(item) }
+                StatusItemRow(
+                    item, color, expanded = k in open, sectionId = sectionId, drag = drag, wobble = wobble, listState = listState,
+                    onToggle = { setOpen(if (k in open) open - k else open + k) }, onDrop = onDrop,
+                ) { onOpen(item) }
             }
+            if (targeted && drag.target?.second == null) DropLine(color)
             if (onAdd != null) Box(
                 Modifier.padding(top = if (items.isEmpty()) 0.dp else 4.dp).size(38.dp).clip(CircleShape).clickable(onClick = onAdd),
                 contentAlignment = Alignment.Center,
@@ -404,11 +574,72 @@ private fun SectionBox(
     }
 }
 
+/** Where the dragged item will land. */
 @Composable
-private fun StatusItemRow(item: ListItem, color: Color, expanded: Boolean, onToggle: () -> Unit, onEdit: () -> Unit) {
+private fun DropLine(color: Color) {
+    Box(Modifier.padding(vertical = 3.dp).fillMaxWidth(0.9f).height(3.dp).clip(RoundedCornerShape(2.dp)).background(color))
+}
+
+@Composable
+private fun StatusItemRow(
+    item: ListItem, color: Color, expanded: Boolean, sectionId: Int?, drag: CategoryDrag, wobble: androidx.compose.runtime.State<Float>,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    onToggle: () -> Unit, onDrop: () -> Unit, onEdit: () -> Unit,
+) {
+    val dragKey = sectionId to item.id
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val tap by androidx.compose.runtime.rememberUpdatedState { item.tap(onToggle, onEdit) }
+    val drop by androidx.compose.runtime.rememberUpdatedState(onDrop)
+    androidx.compose.runtime.DisposableEffect(dragKey) { onDispose { drag.items.remove(dragKey) } }
+    val picked = drag.dragging == dragKey
     ListItemCard(
-        item, expanded = expanded, onToggle = onToggle, onEdit = onEdit, background = Nota.Raised,
-        modifier = Modifier.padding(vertical = 4.dp), notesRight = item.notesRight,
+        item, expanded = expanded, onToggle = onToggle, onEdit = onEdit, background = Nota.Raised, tapHandled = true,
+        modifier = Modifier.padding(vertical = 4.dp)
+            .onGloballyPositioned { drag.items[dragKey] = it.boundsInRoot() }
+            .graphicsLayer {
+                alpha = if (picked) 0.3f else 1f
+                if (drag.arranging && !picked) rotationZ = wobble.value * (if (item.id % 2 == 0) 0.9f else -0.9f)
+            }
+            .pointerInput(dragKey) {
+                suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.follow(id: androidx.compose.ui.input.pointer.PointerId) {
+                    androidx.compose.foundation.gestures.drag(id) { change ->
+                        drag.pointer += change.positionChange()
+                        change.consume()
+                        drag.aim()
+                        // Near the top or bottom: scroll along.
+                        val y = drag.pointer.y
+                        val step = when { y < drag.body.top + 120f -> -16f; y > drag.body.bottom - 120f -> 16f; else -> 0f }
+                        if (step != 0f) listState.dispatchRawDelta(step)
+                    }
+                    drop()
+                }
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    HoldGuard.claim(down.uptimeMillis)
+                    if (drag.arranging) {
+                        val first = androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation(down.id) { c, _ -> c.consume() }
+                        if (first == null) {
+                            val last = currentEvent.changes.firstOrNull { it.id == down.id }
+                            if (last != null && !last.pressed && !last.isConsumed) { last.consume(); tap() }
+                            return@awaitEachGesture
+                        }
+                        drag.start(dragKey, first.position)
+                        follow(first.id)
+                        return@awaitEachGesture
+                    }
+                    var cancelled = false
+                    val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                        androidx.compose.foundation.gestures.waitForUpOrCancellation().also { if (it == null) cancelled = true }
+                    }
+                    if (cancelled) return@awaitEachGesture
+                    if (up != null) { up.consume(); tap(); return@awaitEachGesture }
+                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    drag.arranging = true
+                    drag.start(dragKey, down.position)
+                    follow(down.id)
+                }
+            },
+        notesRight = item.notesRight,
         leading = { Box(Modifier.width(4.dp).height(22.dp).clip(RoundedCornerShape(2.dp)).background(color)) },
         title = { Text(item.text, style = MaterialTheme.typography.titleMedium, color = Nota.Text, maxLines = if (expanded) 3 else 1, overflow = TextOverflow.Ellipsis) },
     )
