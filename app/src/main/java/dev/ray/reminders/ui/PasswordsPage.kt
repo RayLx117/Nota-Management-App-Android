@@ -463,7 +463,6 @@ private fun VaultContents(data: dev.ray.reminders.data.VaultData) {
 private fun VaultSettings(onDismiss: () -> Unit, onChangePin: () -> Unit) {
     val ctx = LocalContext.current
     var bio by remember { mutableStateOf(Vault.biometricOn(ctx)) }
-    var confirmReset by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Nota.Shelf,
@@ -481,18 +480,9 @@ private fun VaultSettings(onDismiss: () -> Unit, onChangePin: () -> Unit) {
                     })
                 }
                 SoftButton("Change PIN", onClick = onChangePin, modifier = Modifier.fillMaxWidth(), height = 46.dp, color = Nota.Mint)
-                SoftButton("Erase all passwords", onClick = { confirmReset = true }, modifier = Modifier.fillMaxWidth(), height = 46.dp, color = Nota.Error)
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Done", color = Nota.Mint) } },
-    )
-    if (confirmReset) AlertDialog(
-        onDismissRequest = { confirmReset = false },
-        containerColor = Nota.Shelf,
-        title = { Text("Erase all passwords?") },
-        text = { Text("This deletes every saved password and your PIN.", color = Nota.Sub) },
-        confirmButton = { TextButton(onClick = { Vault.reset(ctx); confirmReset = false; onDismiss() }) { Text("Erase", color = Nota.Error) } },
-        dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel", color = Nota.Sub) } },
     )
 }
 
