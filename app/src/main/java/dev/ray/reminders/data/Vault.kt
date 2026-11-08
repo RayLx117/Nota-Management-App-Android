@@ -30,6 +30,21 @@ data class VaultEntry(
     val url: String = "",
     val notes: String = "",
     val updatedAt: Long = System.currentTimeMillis(),
+    val folderId: Int? = null,
+)
+
+@Serializable
+data class VaultFolder(val id: Int, val name: String)
+
+/** The contents of a locked note (its placeholder in [NotesStore] holds only folder/pin/date). */
+@Serializable
+data class SecretNote(val id: Int, val title: String = "", val body: String = "")
+
+@Serializable
+data class VaultData(
+    val entries: List<VaultEntry> = emptyList(),
+    val folders: List<VaultFolder> = emptyList(),
+    val notes: List<SecretNote> = emptyList(),
 )
 
 /**
@@ -53,9 +68,9 @@ object Vault {
     private const val FREE_TRIES = 5
 
     private var key: SecretKey? = null
-    private val _entries = MutableStateFlow<List<VaultEntry>?>(null)
-    /** Decrypted entries while unlocked; null while locked. */
-    val entries: StateFlow<List<VaultEntry>?> = _entries.asStateFlow()
+    private val _data = MutableStateFlow<VaultData?>(null)
+    /** Everything decrypted while unlocked; null while locked. */
+    val data: StateFlow<VaultData?> = _data.asStateFlow()
 
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("vault", Context.MODE_PRIVATE)
     private fun file(ctx: Context) = File(ctx.applicationContext.filesDir, "passwords.vault")
@@ -66,7 +81,7 @@ object Vault {
 
     fun lock() {
         key = null
-        _entries.value = null
+        _data.value = null
     }
 
     // ------------------------------------------------------------------ PIN
@@ -76,7 +91,7 @@ object Vault {
         val k: SecretKey = SecretKeySpec(ByteArray(32).also { SecureRandom().nextBytes(it) }, "AES")
         storePin(ctx, k, pin)
         key = k
-        save(ctx, emptyList())
+        save(ctx, VaultData())
     }
 
     fun changePin(ctx: Context, pin: String) {
@@ -174,15 +189,50 @@ object Vault {
     // ------------------------------------------------------------------ entries
 
     fun upsert(ctx: Context, entry: VaultEntry) {
-        val list = _entries.value ?: return
-        save(ctx, if (list.any { it.id == entry.id }) list.map { if (it.id == entry.id) entry else it } else list + entry)
+        val d = _data.value ?: return
+        val list = d.entries
+        save(ctx, d.copy(entries = if (list.any { it.id == entry.id }) list.map { if (it.id == entry.id) entry else it } else list + entry))
     }
 
     fun delete(ctx: Context, ids: Set<Int>) {
-        save(ctx, (_entries.value ?: return).filterNot { it.id in ids })
+        val d = _data.value ?: return
+        save(ctx, d.copy(entries = d.entries.filterNot { it.id in ids }))
     }
 
-    fun newId() = ((_entries.value ?: emptyList()).maxOfOrNull { it.id } ?: 0) + 1
+    fun newId() = ((_data.value?.entries ?: emptyList()).maxOfOrNull { it.id } ?: 0) + 1
+
+    // Password folders.
+    fun addFolder(ctx: Context, name: String): Int? {
+        val d = _data.value ?: return null
+        val id = (d.folders.maxOfOrNull { it.id } ?: 0) + 1
+        save(ctx, d.copy(folders = d.folders + VaultFolder(id, name)))
+        return id
+    }
+
+    fun renameFolder(ctx: Context, id: Int, name: String) {
+        val d = _data.value ?: return
+        save(ctx, d.copy(folders = d.folders.map { if (it.id == id) it.copy(name = name) else it }))
+    }
+
+    /** Removes the folder; its passwords stay, just without a folder. */
+    fun deleteFolder(ctx: Context, id: Int) {
+        val d = _data.value ?: return
+        save(ctx, d.copy(folders = d.folders.filterNot { it.id == id }, entries = d.entries.map { if (it.folderId == id) it.copy(folderId = null) else it }))
+    }
+
+    // Locked note contents.
+    fun secretNote(id: Int): SecretNote? = _data.value?.notes?.firstOrNull { it.id == id }
+
+    fun putSecretNote(ctx: Context, note: SecretNote) {
+        val d = _data.value ?: return
+        save(ctx, d.copy(notes = d.notes.filterNot { it.id == note.id } + note))
+    }
+
+    fun removeSecretNotes(ctx: Context, ids: Set<Int>) {
+        val d = _data.value ?: return
+        if (d.notes.none { it.id in ids }) return
+        save(ctx, d.copy(notes = d.notes.filterNot { it.id in ids }))
+    }
 
     /** Forgot the PIN: wipe everything and start over. */
     fun reset(ctx: Context) {
@@ -194,20 +244,23 @@ object Vault {
 
     private fun openWith(ctx: Context, k: SecretKey) {
         val f = file(ctx)
-        val list = if (f.exists()) {
-            ReminderStore.json.decodeFromString<List<VaultEntry>>(String(open(k, f.readBytes()), Charsets.UTF_8))
-        } else emptyList()
+        val data = if (f.exists()) {
+            val text = String(open(k, f.readBytes()), Charsets.UTF_8)
+            // Older vaults were just a list of passwords.
+            if (text.trimStart().startsWith("[")) VaultData(entries = ReminderStore.json.decodeFromString<List<VaultEntry>>(text))
+            else ReminderStore.json.decodeFromString<VaultData>(text)
+        } else VaultData()
         key = k
-        _entries.value = list
+        _data.value = data
     }
 
-    private fun save(ctx: Context, list: List<VaultEntry>) {
+    private fun save(ctx: Context, data: VaultData) {
         val k = key ?: return
         val f = file(ctx)
         val tmp = File(f.parentFile, f.name + ".tmp")
-        tmp.writeBytes(seal(k, ReminderStore.json.encodeToString(list).toByteArray(Charsets.UTF_8)))
+        tmp.writeBytes(seal(k, ReminderStore.json.encodeToString(data).toByteArray(Charsets.UTF_8)))
         tmp.renameTo(f)
-        _entries.value = list
+        _data.value = data
     }
 
     // ------------------------------------------------------------------ crypto helpers

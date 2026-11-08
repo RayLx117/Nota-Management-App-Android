@@ -130,18 +130,16 @@ private var offerAfterSetup by mutableStateOf(false)
 
 @Composable
 fun PasswordsPage(active: Boolean) {
-    val entries by Vault.entries.collectAsState()
-    // Swiping away from Passwords locks it again.
-    LaunchedEffect(active) { if (!active) Vault.lock() }
-    val list = entries
-    if (list == null) VaultLock(active) else VaultContents(list)
-    if (offerAfterSetup && list != null) FingerprintOffer { offerAfterSetup = false }
+    val data by Vault.data.collectAsState()
+    val d = data
+    if (d == null) VaultLock(active) else VaultContents(d)
+    if (offerAfterSetup && d != null) FingerprintOffer { offerAfterSetup = false }
 }
 
 // ------------------------------------------------------------------------ locked
 
 @Composable
-private fun VaultLock(active: Boolean) {
+internal fun VaultLock(active: Boolean) {
     val ctx = LocalContext.current
     var setUp by remember { mutableStateOf(Vault.isSetUp(ctx)) }
     if (!setUp) {
@@ -351,7 +349,8 @@ private fun PadKey(enabled: Boolean, onClick: () -> Unit, plain: Boolean = false
 // ------------------------------------------------------------------------ unlocked
 
 @Composable
-private fun VaultContents(entries: List<VaultEntry>) {
+private fun VaultContents(data: dev.ray.reminders.data.VaultData) {
+    val entries = data.entries
     val ctx = LocalContext.current
     // No screenshots or recents previews while passwords are on screen.
     DisposableEffect(Unit) {
@@ -364,24 +363,44 @@ private fun VaultContents(entries: List<VaultEntry>) {
     var changingPin by remember { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     val sel = rememberSelection(entries.map { it.id }.toSet())
+    var openFolder by rememberSaveable { mutableStateOf<Int?>(null) }
+    var newFolder by remember { mutableStateOf(false) }
+    var renameFolder by remember { mutableStateOf(false) }
+    var deleteFolder by remember { mutableStateOf(false) }
+    val folder = data.folders.firstOrNull { it.id == openFolder }
+    if (openFolder != null && folder == null) openFolder = null
+    if (folder != null) BackHandler { openFolder = null }
 
-    editing?.let { e -> EntryEditor(e, onClose = { editing = null }); return }
+    editing?.let { e -> EntryEditor(e, data.folders.map { it.id to it.name }, onClose = { editing = null }); return }
     if (changingPin) {
         PinSetup("Choose a new PIN", null, onDone = { pin, finished -> Vault.changePin(ctx, pin); changingPin = false }, onCancel = { changingPin = false })
         return
     }
 
+    val searching = query.isNotBlank()
     val shown = entries.filter {
-        query.isBlank() || it.name.contains(query, true) || it.username.contains(query, true) || it.url.contains(query, true)
+        when {
+            searching -> it.name.contains(query, true) || it.username.contains(query, true) || it.url.contains(query, true)
+            folder != null -> it.folderId == folder.id
+            // Top level: passwords that aren't in a folder (folders are listed above them).
+            else -> it.folderId == null || data.folders.none { f -> f.id == it.folderId }
+        }
     }.sortedBy { it.name.lowercase() }
 
     Box(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Column(Modifier.fillMaxSize()) {
             if (sel.active) SelectionBar(sel, "password", onDelete = { Vault.delete(ctx, it) })
+            else if (folder != null) FolderHeader(
+                folder.name, locked = false, onBack = { openFolder = null },
+                onRename = { renameFolder = true }, onDelete = { deleteFolder = true },
+            )
             else Row(verticalAlignment = Alignment.CenterVertically) {
                 SearchField(query, { query = it }, "Search passwords", Modifier.weight(1f))
                 IconButton(onClick = { Vault.lock() }) {
                     Icon(painterResource(R.drawable.ic_lock), contentDescription = "Lock", tint = Nota.Mint, modifier = Modifier.size(22.dp))
+                }
+                IconButton(onClick = { newFolder = true }) {
+                    Icon(painterResource(R.drawable.ic_folder_add), contentDescription = "New folder", tint = Nota.Cyan, modifier = Modifier.size(22.dp))
                 }
                 IconButton(onClick = { settings = true }) { Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = Nota.Sub) }
             }
@@ -389,9 +408,12 @@ private fun VaultContents(entries: List<VaultEntry>) {
                 Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 12.dp, bottom = 110.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                if (shown.isEmpty()) item {
+                if (folder == null && !searching && !sel.active) items(data.folders, key = { "f${it.id}" }) { f ->
+                    FolderRow(f.name, entries.count { it.folderId == f.id }, locked = false) { openFolder = f.id }
+                }
+                if (shown.isEmpty() && (folder != null || data.folders.isEmpty() || searching)) item {
                     Text(
-                        if (entries.isEmpty()) "No passwords saved yet." else "No matches.",
+                        when { searching -> "No matches."; folder != null -> "Nothing in this folder yet."; else -> "No passwords saved yet." },
                         style = MaterialTheme.typography.bodyMedium, color = Nota.Sub, modifier = Modifier.padding(vertical = 8.dp),
                     )
                 }
@@ -420,11 +442,20 @@ private fun VaultContents(entries: List<VaultEntry>) {
             }
         }
         if (!sel.active) AddButton(
-            onClick = { editing = VaultEntry(id = 0) },
+            onClick = { editing = VaultEntry(id = 0, folderId = folder?.id) },
             modifier = Modifier.align(Alignment.BottomEnd).padding(vertical = 20.dp, horizontal = 4.dp),
         )
     }
 
+    if (newFolder) FolderNameDialog("New folder", "", onDismiss = { newFolder = false }) { name ->
+        newFolder = false; openFolder = Vault.addFolder(ctx, name)
+    }
+    if (renameFolder && folder != null) FolderNameDialog("Rename folder", folder.name, onDismiss = { renameFolder = false }) { name ->
+        renameFolder = false; Vault.renameFolder(ctx, folder.id, name)
+    }
+    if (deleteFolder && folder != null) ConfirmFolderDelete(folder.name, "passwords", onDismiss = { deleteFolder = false }) {
+        deleteFolder = false; Vault.deleteFolder(ctx, folder.id); openFolder = null
+    }
     if (settings) VaultSettings(onDismiss = { settings = false }, onChangePin = { settings = false; changingPin = true })
 }
 
@@ -466,13 +497,14 @@ private fun VaultSettings(onDismiss: () -> Unit, onChangePin: () -> Unit) {
 }
 
 @Composable
-private fun EntryEditor(entry: VaultEntry, onClose: () -> Unit) {
+private fun EntryEditor(entry: VaultEntry, folders: List<Pair<Int, String>>, onClose: () -> Unit) {
     val ctx = LocalContext.current
     val isNew = entry.id == 0
     var name by remember { mutableStateOf(entry.name) }
     var username by remember { mutableStateOf(entry.username) }
     var password by remember { mutableStateOf(entry.password) }
     var url by remember { mutableStateOf(entry.url) }
+    var folderId by remember { mutableStateOf(entry.folderId) }
     var notes by remember { mutableStateOf(entry.notes) }
     var show by remember { mutableStateOf(isNew) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -521,6 +553,7 @@ private fun EntryEditor(entry: VaultEntry, onClose: () -> Unit) {
                 shape = RoundedCornerShape(16.dp), colors = vaultFieldColors(), modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(notes, { notes = it }, label = { Text("Notes") }, minLines = 3, shape = RoundedCornerShape(16.dp), colors = vaultFieldColors(), modifier = Modifier.fillMaxWidth())
+            if (folders.isNotEmpty()) FolderPicker(folders, folderId, onPick = { folderId = it }, modifier = Modifier.fillMaxWidth())
             PrimaryButton(
                 "Save",
                 onClick = {
@@ -530,6 +563,7 @@ private fun EntryEditor(entry: VaultEntry, onClose: () -> Unit) {
                             entry.copy(
                                 id = if (isNew) Vault.newId() else entry.id, name = name.trim(), username = username.trim(),
                                 password = password, url = url.trim(), notes = notes.trim(), updatedAt = System.currentTimeMillis(),
+                                folderId = folderId,
                             ),
                         )
                         onClose()

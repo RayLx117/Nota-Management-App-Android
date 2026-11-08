@@ -84,10 +84,34 @@ import java.time.format.DateTimeFormatter
 /** The Notes tab: plain notes, and a PIN/fingerprint-locked Passwords page one swipe over. */
 @Composable
 fun NotesScreen(visible: Boolean) {
+    val ctx = LocalContext.current
     val pages = rememberPagerState { 2 }
-    // Leaving the tab: back to Notes, and the passwords lock again.
+    // Leaving the tab: back to Notes, and everything locked locks again.
     LaunchedEffect(visible) { if (!visible) { pages.scrollToPage(0); Vault.lock() } }
     var editing by rememberSaveable { mutableStateOf<Int?>(null) }
+    var newIn by rememberSaveable { mutableStateOf<Int?>(null) }
+    // Something locked was tapped: show the PIN pad, then carry on.
+    var afterUnlock by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val vault by Vault.data.collectAsState()
+    LaunchedEffect(vault != null) {
+        if (vault != null) {
+            NotesStore.get(ctx).reconcile(ctx)
+            afterUnlock?.let { afterUnlock = null; it() }
+        }
+    }
+    fun requireUnlock(then: () -> Unit) { if (Vault.isUnlocked()) then() else afterUnlock = then }
+
+    if (afterUnlock != null) {
+        BackHandler { afterUnlock = null }
+        Column(Modifier.fillMaxSize().background(Nota.Bg).statusBarsPadding()) {
+            Row(Modifier.padding(horizontal = 4.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { afterUnlock = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Cancel", tint = Nota.Text) }
+                Text("Unlock", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = Nota.Text)
+            }
+            VaultLock(active = true)
+        }
+        return
+    }
 
     AnimatedContent(
         editing,
@@ -99,12 +123,16 @@ fun NotesScreen(visible: Boolean) {
         label = "note editor",
     ) { id ->
         if (id != null) {
-            NoteEditor(id, onClose = { editing = null })
+            NoteEditor(id, newIn, requireUnlock = ::requireUnlock, onClose = { editing = null })
         } else {
             Column(Modifier.fillMaxSize().background(Nota.Bg).statusBarsPadding()) {
                 TwoPageHeader("Notes", "Passwords", pages)
                 HorizontalPager(pages, modifier = Modifier.weight(1f)) { page ->
-                    if (page == 0) NotesPage(onOpen = { editing = it })
+                    if (page == 0) NotesPage(
+                        onOpen = { note -> editing = note },
+                        onNew = { id, folder -> newIn = folder; editing = id },
+                        requireUnlock = ::requireUnlock,
+                    )
                     else PasswordsPage(active = visible && pages.currentPage == 1)
                 }
             }
@@ -165,44 +193,114 @@ private fun shortWhen(millis: Long): String {
 }
 
 @Composable
-private fun NotesPage(onOpen: (Int) -> Unit) {
+private fun NotesPage(onOpen: (Int) -> Unit, onNew: (Int, Int?) -> Unit, requireUnlock: (() -> Unit) -> Unit) {
     val ctx = LocalContext.current
     val store = remember { NotesStore.get(ctx) }
     val notes by store.notes.collectAsState()
+    val folders by store.folders.collectAsState()
+    val vault by Vault.data.collectAsState()
+    val unlocked = vault != null
     var query by rememberSaveable { mutableStateOf("") }
+    var openFolder by rememberSaveable { mutableStateOf<Int?>(null) }
+    var newFolder by remember { mutableStateOf(false) }
+    var renameFolder by remember { mutableStateOf(false) }
+    var deleteFolder by remember { mutableStateOf(false) }
+    val folder = folders.firstOrNull { it.id == openFolder }
+    if (openFolder != null && folder == null) openFolder = null
+    if (folder != null) BackHandler { openFolder = null }
     val sel = rememberSelection(notes.map { it.id }.toSet())
-    val shown = notes
-        .filter { query.isBlank() || it.title.contains(query, true) || it.body.contains(query, true) }
-        .sortedWith(compareByDescending<Note> { it.pinned }.thenByDescending { it.updatedAt })
+
+    // What a card shows: locked notes reveal their text only while unlocked.
+    fun visible(n: Note): Note = if (n.encrypted) Vault.secretNote(n.id)?.let { n.copy(title = it.title, body = it.body) } ?: n else n
+    val searching = query.isNotBlank()
+    val shown = notes.map(::visible).filter { n ->
+        when {
+            searching -> (!n.encrypted || unlocked) && (n.title.contains(query, true) || n.body.contains(query, true))
+            folder != null -> n.folderId == folder.id
+            else -> n.folderId == null || folders.none { it.id == n.folderId }
+        }
+    }.sortedWith(compareByDescending<Note> { it.pinned }.thenByDescending { it.updatedAt })
+    val folderLocked = folder?.locked == true && !unlocked
 
     Box(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Column(Modifier.fillMaxSize()) {
-            if (sel.active) SelectionBar(sel, "note", onDelete = { store.delete(it) })
-            else SearchField(query, { query = it }, "Search notes", Modifier.fillMaxWidth())
-            LazyColumn(
+            when {
+                sel.active -> SelectionBar(sel, "note", onDelete = { ids -> store.delete(ids); if (unlocked) Vault.removeSecretNotes(ctx, ids) })
+                folder != null -> FolderHeader(
+                    folder.name, folder.locked, onBack = { openFolder = null },
+                    onRename = { renameFolder = true },
+                    onDelete = { requireUnlock { deleteFolder = true } },
+                    onToggleLock = {
+                        requireUnlock {
+                            store.updateFolder(folder.copy(locked = !folder.locked))
+                            store.reconcile(ctx)
+                        }
+                    },
+                )
+                else -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    SearchField(query, { query = it }, "Search notes", Modifier.weight(1f))
+                    IconButton(onClick = { newFolder = true }) {
+                        Icon(painterResource(R.drawable.ic_folder_add), contentDescription = "New folder", tint = Nota.Cyan, modifier = Modifier.size(22.dp))
+                    }
+                }
+            }
+            if (folderLocked) {
+                Column(
+                    Modifier.fillMaxSize().padding(bottom = 80.dp),
+                    verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(painterResource(R.drawable.ic_lock), contentDescription = null, tint = Nota.Mint, modifier = Modifier.size(34.dp))
+                    Text("This folder is locked", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = Nota.Text, modifier = Modifier.padding(top = 10.dp))
+                    Spacer(Modifier.height(14.dp))
+                    SoftButton("Unlock", onClick = { requireUnlock {} }, color = Nota.Mint, height = 46.dp)
+                }
+            } else LazyColumn(
                 Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 12.dp, bottom = 110.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                if (shown.isEmpty()) item {
+                if (folder == null && !searching && !sel.active) items(folders, key = { "f${it.id}" }) { f ->
+                    FolderRow(f.name, notes.count { it.folderId == f.id }, f.locked) {
+                        if (f.locked) requireUnlock { openFolder = f.id } else openFolder = f.id
+                    }
+                }
+                if (shown.isEmpty() && (folder != null || folders.isEmpty() || searching)) item {
                     Text(
-                        if (notes.isEmpty()) "No notes yet." else "No matches.",
+                        when { searching -> "No matches."; folder != null -> "Nothing in this folder yet."; else -> "No notes yet." },
                         style = MaterialTheme.typography.bodyMedium, color = Nota.Sub, modifier = Modifier.padding(vertical = 8.dp),
                     )
                 }
-                items(shown, key = { it.id }) { note -> NoteCard(note, sel, onOpen = { onOpen(note.id) }) }
+                items(shown, key = { it.id }) { note ->
+                    NoteCard(note, hidden = note.encrypted && !unlocked, sel = sel, onOpen = {
+                        if (store.isProtected(note)) requireUnlock { onOpen(note.id) } else onOpen(note.id)
+                    })
+                }
             }
         }
-        if (!sel.active) AddButton(
-            onClick = { onOpen(store.newId()) },
+        if (!sel.active && !folderLocked) AddButton(
+            onClick = { onNew(store.newId(), folder?.id) },
             modifier = Modifier.align(Alignment.BottomEnd).padding(vertical = 20.dp, horizontal = 4.dp),
         )
+    }
+
+    if (newFolder) FolderNameDialog("New folder", "", onDismiss = { newFolder = false }) { name ->
+        newFolder = false; openFolder = store.addFolder(name)
+    }
+    if (renameFolder && folder != null) FolderNameDialog("Rename folder", folder.name, onDismiss = { renameFolder = false }) { name ->
+        renameFolder = false; store.updateFolder(folder.copy(name = name))
+    }
+    if (deleteFolder && folder != null) ConfirmFolderDelete(folder.name, "notes", onDismiss = { deleteFolder = false }) {
+        deleteFolder = false; store.deleteFolder(folder.id); store.reconcile(ctx); openFolder = null
     }
 }
 
 @Composable
-private fun NoteCard(note: Note, sel: Selection, onOpen: () -> Unit) {
-    val title = note.title.ifBlank { note.body.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty() }
-    val body = if (note.title.isBlank()) note.body.lineSequence().dropWhile { it.isBlank() }.drop(1).joinToString("\n") else note.body
+private fun NoteCard(note: Note, hidden: Boolean, sel: Selection, onOpen: () -> Unit) {
+    val title = if (hidden) "Locked note" else note.title.ifBlank { note.body.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty() }
+    val body = when {
+        hidden -> ""
+        note.title.isBlank() -> note.body.lineSequence().dropWhile { it.isBlank() }.drop(1).joinToString("\n")
+        else -> note.body
+    }
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Nota.Shelf)
             .selectable(sel, note.id, onOpen).padding(16.dp),
@@ -210,41 +308,63 @@ private fun NoteCard(note: Note, sel: Selection, onOpen: () -> Unit) {
     ) {
         if (sel.active) SelectCircle(sel.has(note.id), Modifier.padding(end = 12.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp, color = Nota.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                title, fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp,
+                color = if (hidden) Nota.Sub else Nota.Text, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
             if (body.isNotBlank()) Text(
                 body.trim(), style = MaterialTheme.typography.bodyMedium, color = Nota.Sub, maxLines = 3, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 4.dp),
             )
             Text(shortWhen(note.updatedAt), style = MaterialTheme.typography.bodySmall, color = Nota.Outline, modifier = Modifier.padding(top = 8.dp))
         }
+        if (note.locked) Icon(painterResource(R.drawable.ic_lock), contentDescription = "Locked", tint = Nota.Mint, modifier = Modifier.padding(start = 8.dp).size(16.dp))
         if (note.pinned) Icon(painterResource(R.drawable.ic_pin), contentDescription = "Pinned", tint = Nota.Mint, modifier = Modifier.padding(start = 8.dp).size(16.dp))
     }
 }
 
 /** Full-screen note editor; saves as you type, and drops the note if you leave it empty. */
 @Composable
-private fun NoteEditor(id: Int, onClose: () -> Unit) {
+private fun NoteEditor(id: Int, newFolder: Int?, requireUnlock: (() -> Unit) -> Unit, onClose: () -> Unit) {
     val ctx = LocalContext.current
     val store = remember { NotesStore.get(ctx) }
+    val folders by store.folders.collectAsState()
     val original = remember { store.notes.value.firstOrNull { it.id == id } }
-    var title by rememberSaveable { mutableStateOf(original?.title.orEmpty()) }
-    var body by rememberSaveable { mutableStateOf(original?.body.orEmpty()) }
+    val secret = remember { original?.takeIf { it.encrypted }?.let { Vault.secretNote(it.id) } }
+    var title by rememberSaveable { mutableStateOf(secret?.title ?: original?.title.orEmpty()) }
+    var body by rememberSaveable { mutableStateOf(secret?.body ?: original?.body.orEmpty()) }
     var pinned by rememberSaveable { mutableStateOf(original?.pinned ?: false) }
+    var locked by rememberSaveable { mutableStateOf(original?.locked ?: false) }
+    var folderId by rememberSaveable { mutableStateOf(original?.folderId ?: newFolder) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var lastSaved by remember { mutableStateOf(Triple(title, body, Triple(pinned, locked, folderId))) }
+    val vault by Vault.data.collectAsState()
 
-    fun current() = (original ?: Note(id)).copy(title = title, body = body, pinned = pinned, updatedAt = System.currentTimeMillis())
-    fun close() {
-        val n = current()
-        if (n.isBlank) store.delete(setOf(id))
-        else if (original == null || n.title != original.title || n.body != original.body || n.pinned != original.pinned) store.upsert(n)
-        onClose()
+    fun isProtected() = locked || folders.firstOrNull { it.id == folderId }?.locked == true
+    fun persist() {
+        val state = Triple(title, body, Triple(pinned, locked, folderId))
+        if (state == lastSaved && original != null) return
+        val meta = (store.notes.value.firstOrNull { it.id == id } ?: original ?: Note(id)).copy(
+            pinned = pinned, locked = locked, folderId = folderId, updatedAt = System.currentTimeMillis(),
+        )
+        if (title.isBlank() && body.isBlank()) {
+            store.delete(setOf(id)); Vault.removeSecretNotes(ctx, setOf(id))
+        } else if (isProtected()) {
+            if (!Vault.isUnlocked()) return // can't write locked text without the key
+            Vault.putSecretNote(ctx, dev.ray.reminders.data.SecretNote(id, title, body))
+            store.upsert(meta.copy(title = "", body = "", encrypted = true))
+        } else {
+            store.upsert(meta.copy(title = title, body = body, encrypted = false))
+            if (Vault.isUnlocked()) Vault.removeSecretNotes(ctx, setOf(id))
+        }
+        lastSaved = state
     }
+    fun close() { persist(); onClose() }
+
     // Autosave shortly after you stop typing.
-    LaunchedEffect(title, body, pinned) {
-        delay(500)
-        val n = current()
-        if (!n.isBlank && (original == null || n.title != original.title || n.body != original.body || n.pinned != original.pinned)) store.upsert(n)
-    }
+    LaunchedEffect(title, body, pinned, locked, folderId) { delay(500); persist() }
+    // If Nota locks while a locked note is open (app went to the background), close it.
+    LaunchedEffect(vault == null) { if (vault == null && isProtected()) onClose() }
     BackHandler { close() }
 
     Column(Modifier.fillMaxSize().background(Nota.Bg).statusBarsPadding().navigationBarsPadding().imePadding()) {
@@ -254,24 +374,41 @@ private fun NoteEditor(id: Int, onClose: () -> Unit) {
             IconButton(onClick = { pinned = !pinned }) {
                 Icon(painterResource(R.drawable.ic_pin), contentDescription = if (pinned) "Unpin" else "Pin to top", tint = if (pinned) Nota.Mint else Nota.Sub, modifier = Modifier.size(20.dp))
             }
+            // Lock this note: needs the PIN set up and entered first.
+            IconButton(onClick = { requireUnlock { locked = !locked } }) {
+                Icon(
+                    painterResource(if (locked) R.drawable.ic_lock else R.drawable.ic_lock_open),
+                    contentDescription = if (locked) "Unlock note" else "Lock note",
+                    tint = if (locked) Nota.Mint else Nota.Sub, modifier = Modifier.size(20.dp),
+                )
+            }
             if (original != null) IconButton(onClick = { confirmDelete = true }) {
                 Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = Nota.Error)
             }
         }
+        if (folders.isNotEmpty()) FolderPicker(
+            folders.map { it.id to it.name + if (it.locked) " (locked)" else "" }, folderId,
+            onPick = { f ->
+                // Moving into or out of a locked folder re-encrypts the note, so it needs the PIN.
+                val target = folders.firstOrNull { it.id == f }
+                if (target?.locked == true || isProtected()) requireUnlock { folderId = f } else folderId = f
+            },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        )
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             BasicTextField(
                 value = title, onValueChange = { title = it },
                 textStyle = TextStyle(fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 26.sp, color = Nota.Text),
                 cursorBrush = SolidColor(Nota.Mint),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 decorationBox = { inner ->
                     if (title.isEmpty()) Text("Title", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 26.sp, color = Nota.Outline)
                     inner()
                 },
             )
             Text(
-                (original?.updatedAt ?: System.currentTimeMillis()).let { "Edited " + shortWhen(it) },
+                (original?.updatedAt ?: System.currentTimeMillis()).let { "Edited " + shortWhen(it) } + if (isProtected()) " · locked" else "",
                 style = MaterialTheme.typography.bodySmall, color = Nota.Outline, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp),
             )
             BasicTextField(
@@ -291,7 +428,11 @@ private fun NoteEditor(id: Int, onClose: () -> Unit) {
         onDismissRequest = { confirmDelete = false },
         containerColor = Nota.Shelf,
         title = { Text("Delete this note?") },
-        confirmButton = { TextButton(onClick = { store.delete(setOf(id)); confirmDelete = false; onClose() }) { Text("Delete", color = Nota.Error) } },
+        confirmButton = {
+            TextButton(onClick = {
+                store.delete(setOf(id)); Vault.removeSecretNotes(ctx, setOf(id)); confirmDelete = false; onClose()
+            }) { Text("Delete", color = Nota.Error) }
+        },
         dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel", color = Nota.Sub) } },
     )
 }
