@@ -69,7 +69,9 @@ class NextWidget : AppWidgetProvider() {
             val alarm = all.filter { it.kind == Kind.ALARM && it.enabled && !it.isActive && at(it) != null }.minByOrNull { at(it)!! }
             val ringing = all.firstOrNull { it.kind == Kind.ALARM && it.isActive }
             val pinned = all.filter { it.kind == Kind.REMINDER && it.isActive }.sortedBy { it.activeSince }
-            val upcoming = all.filter { it.kind == Kind.REMINDER && it.enabled && !it.isActive && at(it) != null }
+            // Only what's coming up within the next week.
+            val weekOut = now + 7 * 24 * 60 * 60_000L
+            val upcoming = all.filter { it.kind == Kind.REMINDER && it.enabled && !it.isActive && at(it) != null && at(it)!! <= weekOut }
                 .sortedBy { at(it)!! }.take(MAX_UPCOMING)
             val w = WidgetColors(ctx)
             val timeFmt = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)

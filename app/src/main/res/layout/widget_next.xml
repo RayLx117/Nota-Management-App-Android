@@ -30,6 +30,6 @@
         <ListView android:id="@+id/items" android:layout_width="match_parent" android:layout_height="match_parent"
             android:divider="@null" android:dividerHeight="0dp" android:scrollbars="none" />
         <TextView android:id="@+id/empty" android:layout_width="match_parent" android:layout_height="match_parent"
-            android:gravity="center" android:textColor="#FF8E9AB8" android:textSize="13sp" android:text="Nothing coming up" />
+            android:gravity="center" android:textColor="#FF8E9AB8" android:textSize="13sp" android:text="Nothing this week" />
     </FrameLayout>
 </LinearLayout>
