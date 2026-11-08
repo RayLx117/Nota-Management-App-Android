@@ -2,7 +2,7 @@ package dev.ray.reminders.ui
 
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
-import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.gestures.drag as followPointer
 import androidx.compose.material.icons.filled.Menu
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -605,7 +605,7 @@ private fun StatusItemRow(
             }
             .pointerInput(dragKey) {
                 suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.follow(id: androidx.compose.ui.input.pointer.PointerId) {
-                    androidx.compose.foundation.gestures.drag(id) { change ->
+                    followPointer(id) { change ->
                         drag.pointer += change.positionChange()
                         change.consume()
                         drag.aim()
@@ -620,7 +620,7 @@ private fun StatusItemRow(
                     val down = awaitFirstDown(requireUnconsumed = false)
                     HoldGuard.claim(down.uptimeMillis)
                     if (drag.arranging) {
-                        val first = androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation(down.id) { c, _ -> c.consume() }
+                        val first = awaitTouchSlopOrCancellation(down.id) { c, _ -> c.consume() }
                         if (first == null) {
                             val last = currentEvent.changes.firstOrNull { it.id == down.id }
                             if (last != null && !last.pressed && !last.isConsumed) { last.consume(); tap() }
@@ -632,7 +632,7 @@ private fun StatusItemRow(
                     }
                     var cancelled = false
                     val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-                        androidx.compose.foundation.gestures.waitForUpOrCancellation().also { if (it == null) cancelled = true }
+                        waitForUpOrCancellation().also { if (it == null) cancelled = true }
                     }
                     if (cancelled) return@awaitEachGesture
                     if (up != null) { up.consume(); tap(); return@awaitEachGesture }
