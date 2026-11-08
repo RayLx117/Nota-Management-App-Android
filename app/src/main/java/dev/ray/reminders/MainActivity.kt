@@ -68,6 +68,10 @@ class MainActivity : ComponentActivity() {
     private fun route(intent: android.content.Intent?) {
         when (intent?.getStringExtra(EXTRA_TAB)) {
             "timer" -> openTimer.intValue++
+            "notes" -> {
+                dev.ray.reminders.ui.NotesNav.compose.value = intent.getStringExtra(EXTRA_NOTE_TEXT).orEmpty()
+                openOther.value = "notes" to openOther.value.second + 1
+            }
             "alarms", "reminders" -> openOther.value = intent.getStringExtra(EXTRA_TAB)!! to openOther.value.second + 1
             "lists" -> {
                 openLists.intValue++
@@ -96,6 +100,8 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_TAB = "tab"
         const val EXTRA_LIST = "list"
+        /** With tab "notes": open a new note in the full editor, starting with this text. */
+        const val EXTRA_NOTE_TEXT = "note_text"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -143,7 +149,7 @@ private fun App(openTimer: Int, openLists: Int, openOther: Pair<String, Int>) {
         if (openTimer > 0) { editingId = null; calendarKind = null; pager.scrollToPage(Tab.TIMER.ordinal) }
     }
     androidx.compose.runtime.LaunchedEffect(openOther) {
-        val tab = when (openOther.first) { "alarms" -> Tab.ALARMS; "reminders" -> Tab.REMINDERS; else -> null }
+        val tab = when (openOther.first) { "alarms" -> Tab.ALARMS; "reminders" -> Tab.REMINDERS; "notes" -> Tab.NOTES; else -> null }
         if (openOther.second > 0 && tab != null) { editingId = null; calendarKind = null; pager.scrollToPage(tab.ordinal) }
     }
     androidx.compose.runtime.LaunchedEffect(openLists) {

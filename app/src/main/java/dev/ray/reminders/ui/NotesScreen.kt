@@ -82,6 +82,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /** The Notes tab: plain notes, and a PIN/fingerprint-locked Passwords page one swipe over. */
+/** A new note to open in the full editor (from the Quick note widget); the value is its starting text. */
+object NotesNav { val compose = kotlinx.coroutines.flow.MutableStateFlow<String?>(null) }
+
 @Composable
 fun NotesScreen(visible: Boolean) {
     val ctx = LocalContext.current
@@ -100,6 +103,16 @@ fun NotesScreen(visible: Boolean) {
         }
     }
     fun requireUnlock(then: () -> Unit) { if (Vault.isUnlocked()) then() else afterUnlock = then }
+    val compose by NotesNav.compose.collectAsState()
+    LaunchedEffect(compose) {
+        val text = compose ?: return@LaunchedEffect
+        NotesNav.compose.value = null
+        val store = NotesStore.get(ctx)
+        val id = store.newId()
+        if (text.isNotBlank()) store.upsert(dev.ray.reminders.data.Note(id = id, body = text.trim()))
+        pages.scrollToPage(0)
+        newIn = null; editing = id
+    }
 
     Box(Modifier.fillMaxSize()) {
     AnimatedContent(
@@ -303,7 +316,10 @@ private fun NotesPage(onOpen: (Int) -> Unit, onNew: (Int, Int?) -> Unit, require
                             arrange, sel, note.id, enabled = !searching, wobble = wobble,
                             order = { displayed.map { it.id } },
                             canSwap = { a, b -> shown.firstOrNull { it.id == a }?.pinned == shown.firstOrNull { it.id == b }?.pinned },
-                            onOpen = { if (store.isProtected(note)) requireUnlock { onOpen(note.id) } else onOpen(note.id) },
+                            onOpen = {
+                                store.markSeen(note.id)
+                                if (store.isProtected(note)) requireUnlock { onOpen(note.id) } else onOpen(note.id)
+                            },
                             onDrop = ::dropped,
                         ),
                     )
@@ -341,10 +357,14 @@ private fun NoteCard(note: Note, hidden: Boolean, sel: Selection, modifier: Modi
     ) {
         if (sel.active) SelectCircle(sel.has(note.id), Modifier.padding(end = 12.dp))
         Column(Modifier.weight(1f)) {
-            Text(
-                title, fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp,
-                color = if (hidden) Nota.Sub else Nota.Text, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // New from the widget, not opened yet.
+                if (note.fresh) Dot(size = 9.dp, modifier = Modifier.padding(end = 8.dp))
+                Text(
+                    title, fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp,
+                    color = if (hidden) Nota.Sub else Nota.Text, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
             if (body.isNotBlank()) Text(
                 body.trim(), style = MaterialTheme.typography.bodyMedium, color = Nota.Sub, maxLines = 3, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 4.dp),

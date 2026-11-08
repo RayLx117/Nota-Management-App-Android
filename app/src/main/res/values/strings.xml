@@ -8,4 +8,6 @@
     <string name="widget_next_name">Up next</string>
     <string name="widget_next_desc">Your next alarm and next reminder, and how long until each.</string>
     <string name="widget_timer_desc">Start a preset in one tap and watch it count down.</string>
+    <string name="widget_note_name">Quick note</string>
+    <string name="widget_note_desc">Jot down a note and save it with one tap.</string>
 </resources>

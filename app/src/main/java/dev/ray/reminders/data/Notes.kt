@@ -23,6 +23,8 @@ data class Note(
     val encrypted: Boolean = false,
     /** Position when arranged by hand (lower = higher up). New notes go on top. */
     val order: Int = 0,
+    /** Jotted down from the widget and not opened in the app yet (shows a dot). */
+    val fresh: Boolean = false,
 ) {
     val isBlank get() = title.isBlank() && body.isBlank()
 }
@@ -105,6 +107,16 @@ class NotesStore private constructor(private val file: File) {
     fun move(ids: Set<Int>, folderId: Int?) = mutate { l ->
         val top = (l.filter { it.folderId == folderId }.minOfOrNull { it.order } ?: 0) - 1
         l.map { if (it.id in ids && it.folderId != folderId) it.copy(folderId = folderId, order = top) else it }
+    }
+
+    /** Opened in the app for the first time: no more "new" dot. */
+    fun markSeen(id: Int) {
+        if (_notes.value.any { it.id == id && it.fresh }) mutate { l -> l.map { if (it.id == id) it.copy(fresh = false) else it } }
+    }
+
+    /** A quick note from the widget: no title, goes on top, marked new. */
+    fun addQuick(text: String) = synchronized(lock) {
+        upsert(Note(id = newId(), body = text.trim(), fresh = true))
     }
 
     fun delete(ids: Set<Int>) = mutate { l -> l.filterNot { it.id in ids } }

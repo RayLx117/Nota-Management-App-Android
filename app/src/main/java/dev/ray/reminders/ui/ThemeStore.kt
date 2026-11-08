@@ -51,6 +51,7 @@ object ThemeStore {
         dev.ray.reminders.widget.ListWidgets.refreshAll(ctx)
         dev.ray.reminders.widget.TimerWidget.refresh(ctx)
         dev.ray.reminders.widget.NextWidget.refresh(ctx)
+        dev.ray.reminders.widget.NoteWidget.refresh(ctx)
     }
 
     /** Shows a palette without saving it (while dragging the color sliders). */
