@@ -83,7 +83,9 @@ object Notifier {
 
         val openApp = PendingIntent.getActivity(
             ctx, r.id,
-            Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            // Tapping it goes straight to the Reminders (or Alarms) list.
+            Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                .putExtra(MainActivity.EXTRA_TAB, if (r.kind == Kind.ALARM) "alarms" else "reminders"),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val done = Notification.Action.Builder(
@@ -180,7 +182,8 @@ object Notifier {
             ReminderEngine.actionIntent(ctx, ReminderEngine.ACTION_SKIP, r.id),
         ).build()
         val openApp = PendingIntent.getActivity(
-            ctx, r.id, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            ctx, r.id, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                .putExtra(MainActivity.EXTRA_TAB, "alarms"),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val n = Notification.Builder(ctx, CH_QUIET)
