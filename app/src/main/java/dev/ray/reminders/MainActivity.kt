@@ -72,8 +72,14 @@ class MainActivity : ComponentActivity() {
     }
 
     // Passwords lock whenever Nota goes to the background.
+    override fun onStart() {
+        super.onStart()
+        AppVisible.now = true
+    }
+
     override fun onStop() {
         super.onStop()
+        AppVisible.now = false
         dev.ray.reminders.data.Vault.lock()
     }
 
@@ -96,6 +102,9 @@ class MainActivity : ComponentActivity() {
         setContent { RemindersTheme { App(openTimer.intValue, openLists.intValue) } }
     }
 }
+
+/** Whether Nota's main screen is on screen (activities may be started directly then). */
+object AppVisible { @Volatile var now = false }
 
 private const val NEW = -1
 

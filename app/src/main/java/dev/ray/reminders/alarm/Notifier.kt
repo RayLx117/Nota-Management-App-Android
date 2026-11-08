@@ -158,6 +158,8 @@ object Notifier {
         }
         if (alert) nm.cancel(r.id) // a fresh post re-alerts reliably and moves it to the top
         nm.notify(r.id, builder.build())
+        // The full-screen intent only takes over the lock screen; when Nota is open, show the alarm ourselves.
+        if (fullScreen && alert && dev.ray.reminders.AppVisible.now) runCatching { ctx.startActivity(AlarmActivity.intent(ctx, r.id)) }
         if (channel == CH_ALARM) Ringer.start(
             ctx, r.id, r.sound,
             sound = style == AlertStyle.SOUND_AND_VIBRATE || style == AlertStyle.SOUND_ONLY,

@@ -70,6 +70,8 @@ object Timer {
     const val ACTION_CANCEL = "dev.ray.reminders.timer.CANCEL"
     const val ACTION_STOP = "dev.ray.reminders.timer.STOP"
     const val ACTION_ADD = "dev.ray.reminders.timer.ADD"
+    const val ACTION_RESET = "dev.ray.reminders.timer.RESET"
+    const val ACTION_ADD5 = "dev.ray.reminders.timer.ADD5"
     const val ACTION_START_PRESET = "dev.ray.reminders.timer.START_PRESET"
 
     private const val CH_RUNNING = "timer_running"
@@ -144,6 +146,21 @@ object Timer {
         }
     }
 
+    /** From the "time's up" screen: run the same timer again. */
+    fun reset(ctx: Context) {
+        val s = state(ctx).value
+        if (s.durationMs <= 0) return
+        stopRinging(ctx)
+        run(ctx, s, s.durationMs)
+    }
+
+    /** From the "time's up" screen: a fresh [minutes]-minute timer with the same name and sound. */
+    fun again(ctx: Context, minutes: Int) {
+        val s = state(ctx).value
+        stopRinging(ctx)
+        run(ctx, s.copy(durationMs = minutes * 60_000L), minutes * 60_000L)
+    }
+
     fun cancel(ctx: Context) {
         unschedule(ctx)
         stopRinging(ctx)
@@ -156,6 +173,10 @@ object Timer {
         if (!s.running) return
         set(ctx, s.copy(ringing = true))
         showDone(ctx, state(ctx).value)
+        // Android only shows the full-screen intent over the lock screen; when Nota is open, show it ourselves.
+        if (dev.ray.reminders.AppVisible.now) runCatching {
+            ctx.startActivity(Intent(ctx, TimerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
     }
 
     private fun stopRinging(ctx: Context) {
@@ -259,7 +280,8 @@ object Timer {
             .setContentIntent(full)
             .setDeleteIntent(pi(ctx, ACTION_STOP))
             .addAction(action(ctx, "Stop", ACTION_STOP))
-            .addAction(action(ctx, "+1 min", ACTION_ADD))
+            .addAction(action(ctx, "Reset", ACTION_RESET))
+            .addAction(action(ctx, "+5 min", ACTION_ADD5))
             .build()
         nm(ctx).notify(NOTIF_ID, n)
         Ringer.start(ctx, NOTIF_ID, s.sound, sound = !vibrateOnly(ctx), vibrate = true)
@@ -281,6 +303,8 @@ class TimerReceiver : BroadcastReceiver() {
             Timer.ACTION_PAUSE -> Timer.pause(ctx)
             Timer.ACTION_RESUME -> Timer.resume(ctx)
             Timer.ACTION_ADD -> Timer.addMinute(ctx)
+            Timer.ACTION_RESET -> Timer.reset(ctx)
+            Timer.ACTION_ADD5 -> Timer.again(ctx, 5)
             Timer.ACTION_CANCEL, Timer.ACTION_STOP -> Timer.cancel(ctx)
             Timer.ACTION_START_PRESET -> Timer.presets(ctx).value.getOrNull(intent.getIntExtra("preset", -1))?.let {
                 if (!Timer.state(ctx).value.idle) Timer.cancel(ctx)

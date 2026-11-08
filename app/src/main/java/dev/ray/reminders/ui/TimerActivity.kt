@@ -60,7 +60,16 @@ class TimerActivity : ComponentActivity() {
                     Spacer(Modifier.height(48.dp))
                     PrimaryButton("Stop", onClick = { Timer.cancel(this@TimerActivity) }, modifier = Modifier.fillMaxWidth(), height = 64.dp)
                     Spacer(Modifier.height(12.dp))
-                    SoftButton("+1 min", onClick = { Timer.addMinute(this@TimerActivity) }, modifier = Modifier.fillMaxWidth(), height = 56.dp)
+                    SoftButton(
+                        "Reset · " + Timer.shortDuration((t.durationMs / 1000).toInt()), onClick = { Timer.reset(this@TimerActivity) },
+                        modifier = Modifier.fillMaxWidth(), height = 56.dp, color = Nota.Mint,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        listOf(5, 10, 15).forEach { m ->
+                            SoftButton("+$m min", onClick = { Timer.again(this@TimerActivity, m) }, modifier = Modifier.weight(1f), height = 56.dp)
+                        }
+                    }
                 }
             }
         }
