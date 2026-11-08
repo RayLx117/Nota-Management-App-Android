@@ -101,18 +101,7 @@ fun NotesScreen(visible: Boolean) {
     }
     fun requireUnlock(then: () -> Unit) { if (Vault.isUnlocked()) then() else afterUnlock = then }
 
-    if (afterUnlock != null) {
-        BackHandler { afterUnlock = null }
-        Column(Modifier.fillMaxSize().background(Nota.Bg).statusBarsPadding()) {
-            Row(Modifier.padding(horizontal = 4.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { afterUnlock = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Cancel", tint = Nota.Text) }
-                Text("Unlock", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = Nota.Text)
-            }
-            VaultLock(active = true)
-        }
-        return
-    }
-
+    Box(Modifier.fillMaxSize()) {
     AnimatedContent(
         editing,
         contentKey = { it != null },
@@ -137,6 +126,22 @@ fun NotesScreen(visible: Boolean) {
                 }
             }
         }
+    }
+    // Something locked was tapped: the unlock screen covers everything (the page underneath stays put,
+    // so whatever was tapped, like a folder, opens right after).
+    if (afterUnlock != null) {
+        BackHandler { afterUnlock = null }
+        Column(
+            Modifier.fillMaxSize().background(Nota.Bg).statusBarsPadding()
+                .clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) {},
+        ) {
+            Row(Modifier.padding(horizontal = 4.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { afterUnlock = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Cancel", tint = Nota.Text) }
+                Text("Unlock", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = Nota.Text)
+            }
+            VaultLock(active = true)
+        }
+    }
     }
 }
 

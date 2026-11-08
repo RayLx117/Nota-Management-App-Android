@@ -166,16 +166,33 @@ internal fun VaultLock(active: Boolean) {
     LaunchedEffect(lockedUntil) { while (lockedUntil > now) { delay(500); now = System.currentTimeMillis() } }
     val lockedOut = lockedUntil > now
 
+    // With fingerprint on, first choose how to unlock; otherwise straight to the PIN pad.
+    val bio = Vault.biometricOn(ctx)
+    var mode by remember { mutableStateOf(if (bio) UnlockMode.CHOOSE else UnlockMode.PIN) }
     fun fingerprint() {
         val cipher = Vault.biometricUnlockCipher(ctx)
         if (cipher == null) {
             if (Vault.isSetUp(ctx)) message = "Fingerprint changed on this phone. Use your PIN, then turn it back on in settings."
+            mode = UnlockMode.PIN
             return
         }
-        askFingerprint(ctx, "Unlock passwords", cipher, onSuccess = { Vault.finishBiometricUnlock(ctx, it) })
+        mode = UnlockMode.FINGER
+        askFingerprint(
+            ctx, "Unlock passwords", cipher,
+            onSuccess = { Vault.finishBiometricUnlock(ctx, it) },
+            onCancel = { if (mode == UnlockMode.FINGER) mode = UnlockMode.CHOOSE },
+        )
     }
-    // Ask for a fingerprint as soon as the page is in view.
-    LaunchedEffect(active) { if (active && Vault.biometricOn(ctx) && !lockedOut) fingerprint() }
+    if (mode != UnlockMode.PIN) BackHandler(enabled = mode == UnlockMode.FINGER) { mode = UnlockMode.CHOOSE }
+    when (mode) {
+        UnlockMode.CHOOSE -> {
+            UnlockChooser(message, onPin = { mode = UnlockMode.PIN }, onFingerprint = ::fingerprint, onForgot = { confirmReset = true })
+            if (confirmReset) ForgotPinDialog(onDismiss = { confirmReset = false }, onErase = { Vault.reset(ctx); confirmReset = false; setUp = false })
+            return
+        }
+        UnlockMode.FINGER -> { ScanningScreen(onUsePin = { mode = UnlockMode.PIN }); return }
+        UnlockMode.PIN -> {}
+    }
 
     fun submit(p: String) {
         busy = true
@@ -224,14 +241,97 @@ internal fun VaultLock(active: Boolean) {
             Text("Forgot PIN?", color = Nota.Sub)
         }
     }
-    if (confirmReset) AlertDialog(
-        onDismissRequest = { confirmReset = false },
-        containerColor = Nota.Shelf,
-        title = { Text("Erase saved passwords?") },
-        text = { Text("Without the PIN they can't be decrypted. This deletes them all so you can set a new PIN.", color = Nota.Sub) },
-        confirmButton = { TextButton(onClick = { Vault.reset(ctx); confirmReset = false; setUp = false }) { Text("Erase", color = Nota.Error) } },
-        dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel", color = Nota.Sub) } },
+    if (confirmReset) ForgotPinDialog(onDismiss = { confirmReset = false }, onErase = { Vault.reset(ctx); confirmReset = false; setUp = false })
+}
+
+private enum class UnlockMode { CHOOSE, PIN, FINGER }
+
+@Composable
+private fun ForgotPinDialog(onDismiss: () -> Unit, onErase: () -> Unit) = AlertDialog(
+    onDismissRequest = onDismiss,
+    containerColor = Nota.Shelf,
+    title = { Text("Erase saved passwords?") },
+    text = { Text("Without the PIN they can't be decrypted. This deletes them all so you can set a new PIN.", color = Nota.Sub) },
+    confirmButton = { TextButton(onClick = onErase) { Text("Erase", color = Nota.Error) } },
+    dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Nota.Sub) } },
+)
+
+/** "Unlock with": PIN or Fingerprint, side by side. */
+@Composable
+private fun UnlockChooser(message: String?, onPin: () -> Unit, onFingerprint: () -> Unit, onForgot: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(Modifier.height(48.dp))
+        Icon(painterResource(R.drawable.ic_lock), contentDescription = null, tint = Nota.Mint, modifier = Modifier.size(34.dp))
+        Text(
+            "Unlock with", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, color = Nota.Text,
+            modifier = Modifier.padding(top = 10.dp, bottom = 24.dp),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            UnlockOption("PIN", R.drawable.ic_dialpad, Modifier.weight(1f), onPin)
+            UnlockOption("Fingerprint", R.drawable.ic_fingerprint, Modifier.weight(1f), onFingerprint)
+        }
+        if (message != null) Text(
+            message, style = MaterialTheme.typography.bodySmall, color = Nota.Error, textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 16.dp),
+        )
+        TextButton(onClick = onForgot, modifier = Modifier.padding(top = 20.dp)) { Text("Forgot PIN?", color = Nota.Sub) }
+    }
+}
+
+@Composable
+private fun UnlockOption(label: String, icon: Int, modifier: Modifier, onClick: () -> Unit) {
+    Column(
+        modifier.clip(RoundedCornerShape(24.dp)).background(Nota.Shelf).clickable(onClick = onClick).padding(vertical = 26.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.size(64.dp).clip(CircleShape).background(Nota.Raised), contentAlignment = Alignment.Center) {
+            Icon(painterResource(icon), contentDescription = null, tint = Nota.Mint, modifier = Modifier.size(30.dp))
+        }
+        Text(label, fontFamily = Nota.Outfit, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Nota.Text, modifier = Modifier.padding(top = 12.dp))
+    }
+}
+
+/** Behind the phone's fingerprint sheet: a glowing print with rings rippling out, pointing toward the sensor. */
+@Composable
+private fun ScanningScreen(onUsePin: () -> Unit) {
+    val pulse = androidx.compose.animation.core.rememberInfiniteTransition(label = "scan")
+    val wave by pulse.animateFloat(
+        0f, 1f, androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(1600)), label = "wave",
     )
+    val glow by pulse.animateFloat(
+        0.55f, 1f,
+        androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(800), androidx.compose.animation.core.RepeatMode.Reverse),
+        label = "glow",
+    )
+    val accent = Nota.Mint
+    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Spacer(Modifier.height(40.dp))
+        Text("Scanning", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, color = Nota.Text)
+        Text("Hold your finger on the sensor", style = MaterialTheme.typography.bodyMedium, color = Nota.Sub, modifier = Modifier.padding(top = 6.dp))
+        Spacer(Modifier.weight(1f))
+        Box(Modifier.size(220.dp), contentAlignment = Alignment.Center) {
+            // Two rings rippling outward, half a beat apart.
+            androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                listOf(wave, (wave + 0.5f) % 1f).forEach { t ->
+                    drawCircle(
+                        accent.copy(alpha = (1f - t) * 0.5f), radius = size.minDimension / 2 * (0.42f + 0.58f * t),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx()),
+                    )
+                }
+            }
+            Box(
+                Modifier.size(110.dp).clip(CircleShape).background(accent.copy(alpha = 0.14f * glow + 0.06f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(painterResource(R.drawable.ic_fingerprint), contentDescription = null, tint = accent.copy(alpha = glow), modifier = Modifier.size(62.dp))
+            }
+        }
+        Spacer(Modifier.weight(1f))
+        TextButton(onClick = onUsePin, modifier = Modifier.padding(bottom = 28.dp)) { Text("Use PIN instead", color = Nota.Mint) }
+    }
 }
 
 /** Enter a new PIN twice. [onDone] gets the PIN and a callback to run once the vault is ready (offers fingerprint). */
