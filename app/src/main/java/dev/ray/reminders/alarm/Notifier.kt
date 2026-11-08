@@ -199,6 +199,52 @@ object Notifier {
         ctx.getSystemService(NotificationManager::class.java).notify(UPCOMING_OFFSET + r.id, n)
     }
 
+    private const val SNOOZED_OFFSET = 3_000_000
+    private const val CH_SNOOZED = "alarm_snoozed"
+
+    /** A snoozed alarm: live countdown until it rings again, with Cancel snooze. Shows on the lock screen too. */
+    fun showSnoozed(ctx: Context, r: Reminder, until: Long) {
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        if (nm.getNotificationChannel(CH_SNOOZED) == null) nm.createNotificationChannel(
+            NotificationChannel(CH_SNOOZED, "Alarms: snooze countdown", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                setSound(null, null)
+                enableVibration(false)
+                setShowBadge(false)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            },
+        )
+        val time = java.time.Instant.ofEpochMilli(until).atZone(java.time.ZoneId.systemDefault()).toLocalTime()
+            .format(java.time.format.DateTimeFormatter.ofLocalizedTime(java.time.format.FormatStyle.SHORT))
+        val cancel = Notification.Action.Builder(
+            Icon.createWithResource(ctx, R.drawable.ic_check), "Cancel snooze",
+            ReminderEngine.actionIntent(ctx, ReminderEngine.ACTION_CANCEL_SNOOZE, r.id),
+        ).build()
+        val openApp = PendingIntent.getActivity(
+            ctx, SNOOZED_OFFSET + r.id, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                .putExtra(MainActivity.EXTRA_TAB, "alarms"),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val b = Notification.Builder(ctx, CH_SNOOZED)
+            .setSmallIcon(R.drawable.ic_snooze)
+            .setContentTitle(listOfNotNull("Snoozed", r.title.takeIf { it.isNotBlank() && it != "Alarm" }).joinToString(" · "))
+            .setContentText("Rings again at $time")
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setCategory(Notification.CATEGORY_ALARM)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setUsesChronometer(true).setChronometerCountDown(true).setWhen(until).setShowWhen(true)
+            .setGroup("snoozed-${r.id}")
+            .setContentIntent(openApp)
+            .addAction(cancel)
+        // Android 16 Live Update: the countdown chip in the status bar and on the lock screen's Now Bar.
+        b.addExtras(android.os.Bundle().apply { putBoolean("android.requestPromotedOngoing", true) })
+        nm.notify(SNOOZED_OFFSET + r.id, b.build())
+    }
+
+    fun cancelSnoozed(ctx: Context, id: Int) {
+        ctx.getSystemService(NotificationManager::class.java).cancel(SNOOZED_OFFSET + id)
+    }
+
     fun cancelUpcoming(ctx: Context, id: Int) {
         ctx.getSystemService(NotificationManager::class.java).cancel(UPCOMING_OFFSET + id)
     }

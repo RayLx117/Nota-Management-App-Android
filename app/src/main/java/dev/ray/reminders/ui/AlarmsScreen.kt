@@ -1,5 +1,10 @@
 package dev.ray.reminders.ui
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -72,7 +77,8 @@ private fun AlarmRow(a: Reminder, sel: Selection, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (sel.active) SelectCircle(sel.has(a.id), Modifier.padding(end = 14.dp))
-        Column(Modifier.weight(1f).alpha(if (a.enabled) 1f else 0.45f)) {
+        val snoozed = a.snoozedUntil
+        Column(Modifier.weight(1f).alpha(if (a.enabled || snoozed != null) 1f else 0.45f)) {
             Text(
                 Describe.time(a), fontFamily = Nota.Mono, fontWeight = FontWeight.SemiBold, fontSize = 34.sp,
                 color = if (ringing) Nota.Mint else Nota.Text,
@@ -85,11 +91,33 @@ private fun AlarmRow(a: Reminder, sel: Selection, onClick: () -> Unit) {
                     style = MaterialTheme.typography.bodyMedium, color = Nota.Sub, maxLines = 1,
                 )
             }
+            if (snoozed != null) SnoozeLine(snoozed) { ReminderEngine.cancelSnooze(ctx, a.id) }
         }
         if (!sel.active) Switch(
             checked = a.enabled, onCheckedChange = { ReminderEngine.setEnabled(ctx, a.id, it) },
             colors = notaSwitchColors(),
         )
+    }
+}
+
+/** "Snoozed · 8:42" counting down, with a Cancel snooze button. */
+@Composable
+private fun SnoozeLine(until: Long, onCancel: () -> Unit) {
+    val now by androidx.compose.runtime.produceState(System.currentTimeMillis(), until) {
+        while (true) { value = System.currentTimeMillis(); kotlinx.coroutines.delay(1_000) }
+    }
+    val left = ((until - now + 999) / 1000).coerceAtLeast(0)
+    val text = if (left >= 3600) "%d:%02d:%02d".format(left / 3600, left % 3600 / 60, left % 60) else "%d:%02d".format(left / 60, left % 60)
+    Row(
+        Modifier.padding(top = 8.dp).clip(RoundedCornerShape(12.dp)).background(Nota.Raised).padding(start = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(painterResource(dev.ray.reminders.R.drawable.ic_snooze), null, tint = Nota.Cyan, modifier = Modifier.size(16.dp))
+        Text(
+            "Snoozed · $text", fontFamily = Nota.Mono, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Nota.Cyan,
+            modifier = Modifier.padding(start = 8.dp),
+        )
+        TextButton(onClick = onCancel) { Text("Cancel snooze", color = Nota.Mint) }
     }
 }
 

@@ -37,6 +37,7 @@ object ReminderEngine {
     const val ACTION_PREALERT = "dev.ray.reminders.action.PREALERT"
     const val ACTION_SKIP = "dev.ray.reminders.action.SKIP"
     const val ACTION_END = "dev.ray.reminders.action.END"
+    const val ACTION_CANCEL_SNOOZE = "dev.ray.reminders.action.CANCEL_SNOOZE"
     const val EXTRA_ID = "id"
 
     private const val MINUTE = 60_000L
@@ -72,7 +73,7 @@ object ReminderEngine {
         if (!r.enabled) r = r.copy(activeSince = null, fullScreenShownAt = null, snoozedUntil = null)
         store(ctx).upsert(r)
         armFire(ctx, r)
-        if (r.snoozedUntil == null) cancel(ctx, ACTION_SNOOZE_END, r.id)
+        if (r.snoozedUntil == null) { cancel(ctx, ACTION_SNOOZE_END, r.id); Notifier.cancelSnoozed(ctx, r.id) }
         if (r.isActive) {
             // Behaviour may have changed: refresh the notification quietly and re-arm alerts.
             Notifier.show(ctx, r, alert = false)
@@ -89,6 +90,7 @@ object ReminderEngine {
     fun delete(ctx: Context, id: Int) {
         listOf(ACTION_FIRE, ACTION_NAG, ACTION_FULLSCREEN, ACTION_SNOOZE_END, ACTION_PREALERT, ACTION_END).forEach { cancel(ctx, it, id) }
         Notifier.cancelUpcoming(ctx, id)
+        Notifier.cancelSnoozed(ctx, id)
         Notifier.cancel(ctx, id)
         store(ctx).get(id)?.imagePath?.let(Images::delete)
         store(ctx).delete(id)
@@ -101,16 +103,26 @@ object ReminderEngine {
     fun done(ctx: Context, id: Int) {
         store(ctx).modify(id) { it.copy(activeSince = null, fullScreenShownAt = null, snoozedUntil = null) }
         cancel(ctx, ACTION_SNOOZE_END, id)
+        Notifier.cancelSnoozed(ctx, id)
         clearActive(ctx, id)
+    }
+
+    /** Called off a snooze: it won't ring again for this occurrence. */
+    fun cancelSnooze(ctx: Context, id: Int) {
+        store(ctx).modify(id) { it.copy(snoozedUntil = null) }
+        cancel(ctx, ACTION_SNOOZE_END, id)
+        Notifier.cancelSnoozed(ctx, id)
     }
 
     fun snooze(ctx: Context, id: Int, fromAlarm: Boolean = false) {
         val r = store(ctx).get(id) ?: return
         val minutes = if (fromAlarm) r.fx.alarmSnoozeMinutes else r.fx.snoozeMinutes
         val until = now() + minutes.coerceAtLeast(1) * MINUTE
-        store(ctx).modify(id) { it.copy(activeSince = null, fullScreenShownAt = null, snoozedUntil = until) }
+        val snoozed = store(ctx).modify(id) { it.copy(activeSince = null, fullScreenShownAt = null, snoozedUntil = until) }
         clearActive(ctx, id)
         setAlarm(ctx, ACTION_SNOOZE_END, id, until)
+        // Alarms show a live countdown to the next ring (status bar, lock screen, Now Bar).
+        if (snoozed != null && snoozed.kind == Kind.ALARM) Notifier.showSnoozed(ctx, snoozed, until)
     }
 
     /** Alarm heads-up "Skip": drop the upcoming occurrence and move on to the one after. */
@@ -149,7 +161,7 @@ object ReminderEngine {
                 armFire(ctx, updated)
                 activate(ctx, id)
             }
-            ACTION_SNOOZE_END -> if (r.snoozedUntil != null) activate(ctx, id)
+            ACTION_SNOOZE_END -> if (r.snoozedUntil != null) { Notifier.cancelSnoozed(ctx, id); activate(ctx, id) }
             ACTION_END -> if (r.isActive || r.snoozedUntil != null) done(ctx, id)
             ACTION_NAG -> if (r.isActive && r.fx.effectiveNag) {
                 Notifier.show(ctx, r, alert = true, fullScreen = r.fullScreenShownAt != null)
@@ -176,7 +188,10 @@ object ReminderEngine {
                 }
             }
             val current = store(ctx).get(r.id) ?: continue
-            current.snoozedUntil?.let { setAlarm(ctx, ACTION_SNOOZE_END, r.id, maxOf(it, now + 1_000)) }
+            current.snoozedUntil?.let {
+                setAlarm(ctx, ACTION_SNOOZE_END, r.id, maxOf(it, now + 1_000))
+                if (current.kind == Kind.ALARM) Notifier.showSnoozed(ctx, current, maxOf(it, now + 1_000))
+            }
             if (current.isActive) {
                 Notifier.show(ctx, current, alert = false)
                 armActive(ctx, current)
