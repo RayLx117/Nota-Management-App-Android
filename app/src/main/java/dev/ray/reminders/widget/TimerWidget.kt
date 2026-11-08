@@ -30,6 +30,16 @@ class TimerWidget : AppWidgetProvider() {
         private fun render(ctx: Context, mgr: AppWidgetManager, widgetId: Int) {
             val t = Timer.state(ctx).value
             val rv = RemoteViews(ctx.packageName, R.layout.widget_timer)
+            val w = WidgetColors(ctx)
+            rv.tintBackground(R.id.root, w.bg)
+            rv.setTextColor(R.id.title, w.text)
+            rv.setTextColor(R.id.chrono, w.text)
+            rv.setTextColor(R.id.paused, w.sub)
+            rv.setTextColor(R.id.label, w.sub)
+            rv.tintBackground(R.id.toggle, w.accent)
+            rv.setTextColor(R.id.toggle, w.ink)
+            rv.tintBackground(R.id.cancel, w.chip)
+            PRESET_IDS.forEach { rv.tintBackground(it, w.chip); rv.setTextColor(it, w.text) }
             rv.setOnClickPendingIntent(
                 R.id.title,
                 PendingIntent.getActivity(

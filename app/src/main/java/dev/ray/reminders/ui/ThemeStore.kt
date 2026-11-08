@@ -47,6 +47,9 @@ object ThemeStore {
     fun set(ctx: Context, p: Palette) {
         prefs(ctx).edit().putInt("bg", p.bg).putInt("accent", p.accent).putInt("highlight", p.highlight).apply()
         use(p)
+        // Widgets wear the theme too.
+        dev.ray.reminders.widget.ListWidgets.refreshAll(ctx)
+        dev.ray.reminders.widget.TimerWidget.refresh(ctx)
     }
 
     /** Shows a palette without saving it (while dragging the color sliders). */

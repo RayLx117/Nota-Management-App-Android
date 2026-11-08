@@ -27,9 +27,7 @@ object ListWidgets {
     const val EXTRA_LIST = "list"
     const val EXTRA_ITEM = "item"
 
-    private val SECTION_COLORS = intArrayOf(0xFF2EE59D.toInt(), 0xFF22C3E6.toInt(), 0xFF8B7CFF.toInt(), 0xFFFFC857.toInt(), 0xFFFF7AB6.toInt())
-    private const val TEXT = 0xFFEEF2FA.toInt()
-    private const val SUB = 0xFF8E9AB8.toInt()
+    private fun sectionColors(w: WidgetColors) = intArrayOf(w.accent, w.highlight, 0xFF8B7CFF.toInt(), 0xFFFFC857.toInt(), 0xFFFF7AB6.toInt())
     private const val ERROR = 0xFFFF6B6B.toInt()
 
     fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("widgets", Context.MODE_PRIVATE)
@@ -49,6 +47,16 @@ object ListWidgets {
     fun render(ctx: Context, mgr: AppWidgetManager, widgetId: Int, all: Boolean) {
         val lists = ListsStore.get(ctx).lists.value
         val rv = RemoteViews(ctx.packageName, R.layout.widget_list)
+        val w = WidgetColors(ctx)
+        rv.tintBackground(R.id.root, w.bg)
+        rv.tintBackground(R.id.prev, w.corner)
+        rv.tintBackground(R.id.next, w.corner)
+        rv.tintImage(R.id.prev, w.accent)
+        rv.tintImage(R.id.next, w.accent)
+        rv.setTextColor(R.id.kind, w.sub)
+        rv.setTextColor(R.id.title, w.text)
+        rv.setTextColor(R.id.position, w.sub)
+        rv.setTextColor(R.id.empty, w.sub)
         var list = lists.firstOrNull { it.id == listFor(ctx, widgetId) }
         if (all && list == null) list = lists.firstOrNull()
 
@@ -82,7 +90,7 @@ object ListWidgets {
         rv.setOnClickPendingIntent(R.id.clear, broadcast(ctx, ACTION_CLEAR, widgetId, list.id))
         rv.setTextViewText(R.id.empty, if (list.type == ListType.CHECKLIST) "Nothing on this list." else "No items yet.")
         rv.setEmptyView(R.id.items, R.id.empty)
-        rv.setRemoteAdapter(R.id.items, items(ctx, list))
+        rv.setRemoteAdapter(R.id.items, items(ctx, list, w))
         // Rows fill in which item was tapped; checklists toggle it, sectioned lists open the app.
         rv.setPendingIntentTemplate(
             R.id.items,
@@ -97,13 +105,25 @@ object ListWidgets {
         mgr.updateAppWidget(widgetId, rv)
     }
 
-    private fun items(ctx: Context, list: NotaList): RemoteViews.RemoteCollectionItems {
+    private fun items(ctx: Context, list: NotaList, w: WidgetColors): RemoteViews.RemoteCollectionItems {
+        val TEXT = w.text
+        val SUB = w.sub
+        val SECTION_COLORS = sectionColors(w)
         val b = RemoteViews.RemoteCollectionItems.Builder().setHasStableIds(true).setViewTypeCount(3)
         if (list.type == ListType.CHECKLIST) {
             val ordered = list.items.filterNot { it.checked } + list.items.filter { it.checked }
             ordered.forEach { item ->
                 val row = RemoteViews(ctx.packageName, R.layout.widget_item_check)
-                row.setImageViewResource(R.id.check, if (item.checked) R.drawable.widget_check_on else R.drawable.widget_check_off)
+                if (item.checked) {
+                    row.setImageViewResource(R.id.check, R.drawable.widget_check_mark)
+                    row.setInt(R.id.check, "setBackgroundResource", R.drawable.widget_circle)
+                    row.tintBackground(R.id.check, w.accent)
+                    row.tintImage(R.id.check, w.ink)
+                } else {
+                    row.setImageViewResource(R.id.check, R.drawable.widget_check_off)
+                    row.setInt(R.id.check, "setBackgroundResource", 0)
+                    row.tintImage(R.id.check, w.outline)
+                }
                 row.setTextViewText(R.id.text, item.text)
                 row.setTextColor(R.id.text, if (item.checked) SUB else TEXT)
                 row.setInt(R.id.text, "setPaintFlags", if (item.checked) Paint.STRIKE_THRU_TEXT_FLAG or Paint.ANTI_ALIAS_FLAG else Paint.ANTI_ALIAS_FLAG)
@@ -129,7 +149,7 @@ object ListWidgets {
                 header.setTextColor(R.id.name, color)
                 header.setOnClickFillInIntent(R.id.name, open)
                 b.addItem(-1_000_000L - section.id, header)
-                inSection.forEach { item -> b.addItem(section.id * 100_000L + item.id, sectionItem(ctx, item, color, open)) }
+                inSection.forEach { item -> b.addItem(section.id * 100_000L + item.id, sectionItem(ctx, item, color, open, w)) }
             }
             val loose = list.items.filter { it.sections.none { id -> id in known } }
             if (loose.isNotEmpty()) {
@@ -138,14 +158,17 @@ object ListWidgets {
                 header.setTextColor(R.id.name, SUB)
                 header.setOnClickFillInIntent(R.id.name, open)
                 b.addItem(-2_000_000L, header)
-                loose.forEach { item -> b.addItem(-3_000_000L - item.id, sectionItem(ctx, item, 0xFF34405F.toInt(), open)) }
+                loose.forEach { item -> b.addItem(-3_000_000L - item.id, sectionItem(ctx, item, w.outline, open, w)) }
             }
         }
         return b.build()
     }
 
-    private fun sectionItem(ctx: Context, item: dev.ray.reminders.data.ListItem, color: Int, open: Intent) =
+    private fun sectionItem(ctx: Context, item: dev.ray.reminders.data.ListItem, color: Int, open: Intent, w: WidgetColors) =
         RemoteViews(ctx.packageName, R.layout.widget_section_item).apply {
+            tintBackground(R.id.row, w.chip)
+            setTextColor(R.id.text, w.text)
+            setTextColor(R.id.notes, w.sub)
             setTextViewText(R.id.text, item.text)
             setInt(R.id.bar, "setColorFilter", color)
             if (item.description.isNotBlank()) {
