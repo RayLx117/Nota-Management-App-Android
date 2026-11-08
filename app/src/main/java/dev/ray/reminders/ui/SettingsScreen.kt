@@ -1,5 +1,6 @@
 package dev.ray.reminders.ui
 
+import androidx.compose.foundation.combinedClickable
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
@@ -100,7 +101,7 @@ private fun Categories(onOpen: (SettingsPage) -> Unit) {
     val timerDefault by Sounds.timerDefault(ctx).collectAsState()
     val sounds by Sounds.all(ctx).collectAsState()
     val palette = ThemeStore.palette
-    val themeName = ThemeStore.presets.firstOrNull { it.second == palette }?.first ?: "Custom"
+    val themeName = ThemeStore.nameOf(palette)
     Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 16.dp)) {
         Text(
             "Settings", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp, color = Nota.Text,
@@ -196,8 +197,31 @@ private fun ThemePage() {
             if (row.size == 1) Spacer(Modifier.weight(1f))
         }
     }
+    // Themes you saved: tap to use, hold to rename or delete.
+    var managing by remember { mutableStateOf<SavedTheme?>(null) }
+    if (ThemeStore.saved.isNotEmpty()) {
+        Label("MY THEMES")
+        ThemeStore.saved.chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { t ->
+                    PresetCard(
+                        t.name, t.palette, selected = t.palette == current, onClick = { ThemeStore.set(ctx, t.palette) },
+                        onLongClick = { managing = t }, modifier = Modifier.weight(1f),
+                    )
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+    managing?.let { t ->
+        ThemeNameDialog(
+            "Edit theme", t.name, confirm = "Save", onDismiss = { managing = null },
+            onDelete = { ThemeStore.deleteTheme(ctx, t.name); managing = null },
+        ) { name -> ThemeStore.renameTheme(ctx, t.name, name); managing = null }
+    }
     Label("CUSTOM")
     var editing by remember { mutableStateOf<Slot?>(null) }
+    var naming by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Nota.Shelf).padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -212,9 +236,51 @@ private fun ThemePage() {
             }
         }
     }
+    // Keep this combination as a named theme.
+    val alreadySaved = ThemeStore.presets.any { it.second == current } || ThemeStore.saved.any { it.palette == current }
+    SoftButton(
+        if (alreadySaved) "Saved as ${ThemeStore.nameOf(current)}" else "Save as a theme",
+        onClick = { if (!alreadySaved) naming = true }, color = if (alreadySaved) Nota.Sub else Nota.Mint, height = 48.dp,
+        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+    )
+    if (naming) ThemeNameDialog("Name this theme", "", confirm = "Save", onDismiss = { naming = false }) { name ->
+        ThemeStore.saveTheme(ctx, name, current); naming = false
+    }
     editing?.let { slot ->
         ColorDialog(slot, start = current, onDone = { editing = null })
     }
+}
+
+@Composable
+private fun ThemeNameDialog(
+    title: String, initial: String, confirm: String, onDismiss: () -> Unit, onDelete: (() -> Unit)? = null, onSave: (String) -> Unit,
+) {
+    var name by remember { mutableStateOf(initial) }
+    val ok = name.isNotBlank()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Nota.Shelf,
+        title = { Text(title) },
+        text = {
+            Column {
+                androidx.compose.material3.OutlinedTextField(
+                    name, { name = it.take(24) }, singleLine = true, placeholder = { Text("e.g. Midnight", color = Nota.Sub) },
+                    shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Nota.Mint, unfocusedBorderColor = Nota.Outline, cursorColor = Nota.Mint,
+                        focusedTextColor = Nota.Text, unfocusedTextColor = Nota.Text,
+                    ),
+                )
+                if (onDelete != null) TextButton(onClick = onDelete, modifier = Modifier.padding(top = 6.dp)) {
+                    Text("Delete theme", color = Nota.Error)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(name.trim()) }, enabled = ok) { Text(confirm, color = if (ok) Nota.Mint else Nota.Outline) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Nota.Sub) } },
+    )
 }
 
 private fun Palette.get(slot: Slot) = when (slot) { Slot.BG -> bg; Slot.ACCENT -> accent; Slot.HIGHLIGHT -> highlight }
@@ -224,13 +290,16 @@ private fun Palette.with(slot: Slot, c: Int) = when (slot) {
 
 /** A tiny picture of the app in that theme: the shelf, a card with the accent dot, a highlight bar. */
 @Composable
-private fun PresetCard(name: String, p: Palette, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+private fun PresetCard(
+    name: String, p: Palette, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, onLongClick: (() -> Unit)? = null,
+) {
     val c = remember(p) { ThemeStore.derive(p) }
     Box(modifier) {
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(c.bg)
                 .border(2.dp, if (selected) c.accent else c.raised, RoundedCornerShape(18.dp))
-                .clickable(onClick = onClick).padding(12.dp),
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Row(

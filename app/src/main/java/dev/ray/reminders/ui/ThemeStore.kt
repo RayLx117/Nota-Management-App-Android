@@ -10,6 +10,12 @@ import androidx.compose.ui.graphics.luminance
 /** The three colors someone picks in Settings > Theme (ARGB ints). */
 data class Palette(val bg: Int, val accent: Int, val highlight: Int)
 
+/** A custom theme someone saved and named. */
+@kotlinx.serialization.Serializable
+data class SavedTheme(val name: String, val bg: Int, val accent: Int, val highlight: Int) {
+    val palette get() = Palette(bg, accent, highlight)
+}
+
 /** Every color the app draws with, worked out from a [Palette]. */
 data class ThemeColors(
     val bg: Color, val shelf: Color, val raised: Color, val line: Color, val outline: Color,
@@ -33,7 +39,27 @@ object ThemeStore {
     var colors by mutableStateOf(derive(default))
         private set
 
+    /** Custom themes saved by name, shown with the presets. */
+    var saved by mutableStateOf<List<SavedTheme>>(emptyList())
+        private set
+
     private var loaded = false
+
+    /** The name to show for [p]: a preset, a saved theme, or "Custom". */
+    fun nameOf(p: Palette) = presets.firstOrNull { it.second == p }?.first ?: saved.firstOrNull { it.palette == p }?.name ?: "Custom"
+
+    fun saveTheme(ctx: Context, name: String, p: Palette) =
+        storeSaved(ctx, saved.filterNot { it.name.equals(name, true) } + SavedTheme(name, p.bg, p.accent, p.highlight))
+
+    fun renameTheme(ctx: Context, old: String, new: String) =
+        storeSaved(ctx, saved.filterNot { it.name != old && it.name.equals(new, true) }.map { if (it.name == old) it.copy(name = new) else it })
+
+    fun deleteTheme(ctx: Context, name: String) = storeSaved(ctx, saved.filterNot { it.name == name })
+
+    private fun storeSaved(ctx: Context, list: List<SavedTheme>) {
+        saved = list
+        prefs(ctx).edit().putString("saved", dev.ray.reminders.data.ReminderStore.json.encodeToString(kotlinx.serialization.builtins.ListSerializer(SavedTheme.serializer()), list)).apply()
+    }
 
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences("theme", Context.MODE_PRIVATE)
 
@@ -41,6 +67,11 @@ object ThemeStore {
         if (loaded) return
         loaded = true
         val p = prefs(ctx)
+        p.getString("saved", null)?.let { s ->
+            saved = runCatching {
+                dev.ray.reminders.data.ReminderStore.json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(SavedTheme.serializer()), s)
+            }.getOrDefault(emptyList())
+        }
         if (p.contains("bg")) use(Palette(p.getInt("bg", default.bg), p.getInt("accent", default.accent), p.getInt("highlight", default.highlight)))
     }
 
