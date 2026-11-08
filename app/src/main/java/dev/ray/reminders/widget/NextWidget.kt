@@ -22,13 +22,18 @@ import java.time.format.FormatStyle
 import java.time.format.TextStyle
 import java.util.Locale
 
-/** "Up next": the next alarm and the next reminder, with how long until each. */
+/** "Up next": a slim line for the next alarm, then pinned reminders (with Done) and upcoming ones, stacked. */
 class NextWidget : AppWidgetProvider() {
     override fun onUpdate(ctx: Context, mgr: AppWidgetManager, ids: IntArray) = refresh(ctx)
 
     override fun onReceive(ctx: Context, intent: Intent) {
         super.onReceive(ctx, intent)
-        if (intent.action == ACTION_TICK) refresh(ctx)
+        when (intent.action) {
+            ACTION_TICK -> refresh(ctx)
+            ACTION_DISMISS -> intent.getIntExtra(EXTRA_ID, -1).takeIf { it >= 0 }?.let {
+                dev.ray.reminders.alarm.ReminderEngine.done(ctx, it); refresh(ctx)
+            }
+        }
     }
 
     override fun onDisabled(ctx: Context) {
@@ -37,6 +42,9 @@ class NextWidget : AppWidgetProvider() {
 
     companion object {
         private const val ACTION_TICK = "dev.ray.reminders.widget.NEXT_TICK"
+        private const val ACTION_DISMISS = "dev.ray.reminders.widget.NEXT_DISMISS"
+        private const val EXTRA_ID = "id"
+        private const val MAX_UPCOMING = 12
 
         private fun tick(ctx: Context) = PendingIntent.getBroadcast(
             ctx, 80_000, Intent(ctx, NextWidget::class.java).setAction(ACTION_TICK),
@@ -60,20 +68,22 @@ class NextWidget : AppWidgetProvider() {
             val now = System.currentTimeMillis()
             val alarm = all.filter { it.kind == Kind.ALARM && it.enabled && !it.isActive && at(it) != null }.minByOrNull { at(it)!! }
             val ringing = all.firstOrNull { it.kind == Kind.ALARM && it.isActive }
-            val reminder = all.filter { it.kind == Kind.REMINDER && it.enabled && !it.isActive && at(it) != null }.minByOrNull { at(it)!! }
+            val pinned = all.filter { it.kind == Kind.REMINDER && it.isActive }.sortedBy { it.activeSince }
+            val upcoming = all.filter { it.kind == Kind.REMINDER && it.enabled && !it.isActive && at(it) != null }
+                .sortedBy { at(it)!! }.take(MAX_UPCOMING)
             val w = WidgetColors(ctx)
             val timeFmt = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
 
             val rv = RemoteViews(ctx.packageName, R.layout.widget_next)
             rv.tintBackground(R.id.root, w.bg)
             rv.tintImage(R.id.divider, w.chip)
-            listOf(R.id.alarm_label, R.id.alarm_title, R.id.reminder_label, R.id.reminder_time).forEach { rv.setTextColor(it, w.sub) }
+            rv.tintImage(R.id.alarm_icon, w.accent)
+            listOf(R.id.alarm_title, R.id.reminder_label, R.id.empty).forEach { rv.setTextColor(it, w.sub) }
             rv.setTextColor(R.id.alarm_time, w.text)
-            rv.setTextColor(R.id.reminder_title, w.text)
             rv.setTextColor(R.id.alarm_in, w.accent)
-            rv.setTextColor(R.id.reminder_in, w.highlight)
             rv.setOnClickPendingIntent(R.id.alarm, open(ctx, "alarms"))
-            rv.setOnClickPendingIntent(R.id.reminder, open(ctx, "reminders"))
+            rv.setOnClickPendingIntent(R.id.reminder_label, open(ctx, "reminders"))
+            rv.setOnClickPendingIntent(R.id.empty, open(ctx, "reminders"))
 
             // Alarm
             when {
@@ -94,31 +104,52 @@ class NextWidget : AppWidgetProvider() {
                     rv.setTextViewText(R.id.alarm_in, "")
                 }
             }
-            // Reminder
-            if (reminder != null) {
-                val t = at(reminder)!!
-                rv.setTextViewText(R.id.reminder_title, reminder.title)
-                if (reminder.allDay && reminder.snoozedUntil == null) {
-                    // All day: just the day.
-                    val day = dayLabel(t) ?: "Today"
-                    rv.setTextViewText(R.id.reminder_time, "All day")
-                    rv.setTextViewText(R.id.reminder_in, day)
-                } else {
-                    val time = Instant.ofEpochMilli(t).atZone(ZoneId.systemDefault()).toLocalTime().format(timeFmt)
-                    rv.setTextViewText(R.id.reminder_time, listOfNotNull(dayLabel(t), time).joinToString(" · "))
-                    rv.setTextViewText(R.id.reminder_in, until(t, now))
-                }
-            } else {
-                rv.setTextViewText(R.id.reminder_title, "Nothing coming up")
-                rv.setTextViewText(R.id.reminder_time, "")
-                rv.setTextViewText(R.id.reminder_in, "")
+            // Reminders: pinned ones first (with a Done button), then what's coming up.
+            val items = RemoteViews.RemoteCollectionItems.Builder().setHasStableIds(true).setViewTypeCount(1)
+            pinned.forEach { r ->
+                val row = row(ctx, w, r.title, if (r.snoozedUntil != null) "Snoozed" else "Pinned now", "", pinned = true)
+                row.setOnClickFillInIntent(R.id.dismiss, Intent().putExtra(EXTRA_ID, r.id))
+                items.addItem(r.id.toLong(), row)
             }
+            upcoming.forEach { r ->
+                val t = at(r)!!
+                val row = if (r.allDay && r.snoozedUntil == null) row(ctx, w, r.title, "All day", dayLabel(t) ?: "Today", pinned = false)
+                else {
+                    val time = Instant.ofEpochMilli(t).atZone(ZoneId.systemDefault()).toLocalTime().format(timeFmt)
+                    row(ctx, w, r.title, listOfNotNull(dayLabel(t), time).joinToString(" · "), until(t, now), pinned = false)
+                }
+                items.addItem(1_000_000L + r.id, row)
+            }
+            rv.setRemoteAdapter(R.id.items, items.build())
+            rv.setEmptyView(R.id.items, R.id.empty)
+            rv.setPendingIntentTemplate(
+                R.id.items,
+                PendingIntent.getBroadcast(
+                    ctx, 80_002, Intent(ctx, NextWidget::class.java).setAction(ACTION_DISMISS),
+                    PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                ),
+            )
             ids.forEach { mgr.updateAppWidget(it, rv) }
 
             // Tick again at the next minute (only delivered while the phone is awake; no battery cost when asleep).
             val next = (now / 60_000 + 1) * 60_000
             ctx.getSystemService(AlarmManager::class.java).set(AlarmManager.RTC, next, tick(ctx))
         }
+
+        private fun row(ctx: Context, w: WidgetColors, title: String, whenText: String, inText: String, pinned: Boolean) =
+            RemoteViews(ctx.packageName, R.layout.widget_next_item).apply {
+                tintBackground(R.id.row, w.chip)
+                tintImage(R.id.bar, if (pinned) w.accent else w.highlight)
+                setTextViewText(R.id.title, title)
+                setTextColor(R.id.title, w.text)
+                setTextViewText(R.id.`when`, whenText)
+                setTextColor(R.id.`when`, if (pinned) w.accent else w.sub)
+                setTextViewText(R.id.`in`, inText)
+                setTextColor(R.id.`in`, w.highlight)
+                setViewVisibility(R.id.`in`, if (inText.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE)
+                setViewVisibility(R.id.dismiss, if (pinned) android.view.View.VISIBLE else android.view.View.GONE)
+                if (pinned) { tintBackground(R.id.dismiss, w.accent); tintImage(R.id.dismiss, w.ink) }
+            }
 
         /** null for today, else "Tomorrow", a weekday this week, or a date. */
         private fun dayLabel(t: Long): String? {
