@@ -104,7 +104,9 @@ fun NotesScreen(visible: Boolean) {
     }
     fun requireUnlock(then: () -> Unit) { if (Vault.isUnlocked()) then() else afterUnlock = then }
     val compose by NotesNav.compose.collectAsState()
-    LaunchedEffect(compose) {
+    // Wait until the Notes tab is actually showing, so nothing resets the new note right after.
+    LaunchedEffect(compose, visible) {
+        if (!visible) return@LaunchedEffect
         val text = compose ?: return@LaunchedEffect
         NotesNav.compose.value = null
         val store = NotesStore.get(ctx)

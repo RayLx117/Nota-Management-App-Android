@@ -47,7 +47,8 @@ class NoteWidget : AppWidgetProvider() {
         fun fullNote(ctx: Context, text: String): PendingIntent = PendingIntent.getActivity(
             ctx, 81_001,
             Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_TAB, "notes")
-                .putExtra(MainActivity.EXTRA_NOTE_TEXT, text).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK),
+                .putExtra(MainActivity.EXTRA_NOTE_TEXT, text).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .setData(android.net.Uri.parse("nota://notes/new")),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
     }
