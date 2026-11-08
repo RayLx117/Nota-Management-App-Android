@@ -20,6 +20,8 @@ internal class WidgetColors(ctx: Context) {
     val accent = c.accent.toArgb()
     val highlight = c.highlight.toArgb()
     val ink = c.ink.toArgb()
+    /** A selected calendar day: the tile color with a little accent mixed in. */
+    val selectedCell = lerp(c.raised, c.accent, 0.3f).toArgb()
 }
 
 /** Recolors a view's (rounded) background drawable. */

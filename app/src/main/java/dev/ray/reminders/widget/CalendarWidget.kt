@@ -145,10 +145,10 @@ class CalendarWidget : AppWidgetProvider() {
                 val isSel = d == selected
                 rv.setTextViewText(DAY[i], d.dayOfMonth.toString())
                 // A square per day: dimmer outside the month, today's number in the accent, the chosen day outlined.
-                rv.tintBackground(CELL[i], if (inMonth) w.chip else w.bg)
-                rv.setTextColor(DAY[i], when { d == today -> w.accent; inMonth -> w.text; else -> w.outline })
-                rv.setViewVisibility(RING[i], if (isSel) View.VISIBLE else View.GONE)
-                rv.tintImage(RING[i], w.accent)
+                // The chosen day gets a soft accent wash (not solid), so its number and event lines stay readable.
+                rv.tintBackground(CELL[i], when { isSel -> w.selectedCell; inMonth -> w.chip; else -> w.bg })
+                rv.setTextColor(DAY[i], when { isSel -> w.text; d == today -> w.accent; inMonth -> w.text; else -> w.outline })
+                rv.setViewVisibility(RING[i], View.GONE)
                 // One line per alarm/reminder that day (up to three), alarms first.
                 val on = items.filter { occursOn(it, d, zone) }.sortedBy { if (it.kind == Kind.ALARM) 0 else 1 }
                 for (k in 0 until 3) {
