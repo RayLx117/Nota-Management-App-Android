@@ -1,5 +1,6 @@
 package dev.ray.reminders.ui
 
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.combinedClickable
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -63,7 +64,7 @@ import dev.ray.reminders.R
 import dev.ray.reminders.data.Sound
 import dev.ray.reminders.data.Sounds
 
-enum class SettingsPage { THEME, SOUNDS, PERMISSIONS, ABOUT }
+enum class SettingsPage { THEME, SOUNDS, BACKUP, PERMISSIONS, ABOUT }
 
 /** Ask the Settings tool to open a page (e.g. Permissions from the start-up prompt). */
 object SettingsNav { val open = kotlinx.coroutines.flow.MutableStateFlow<SettingsPage?>(null) }
@@ -88,6 +89,7 @@ fun SettingsScreen(visible: Boolean) {
             null -> Categories(onOpen = { page = it })
             SettingsPage.THEME -> SubPage("Theme", onBack = { page = null }) { ThemePage() }
             SettingsPage.SOUNDS -> SubPage("Alarm sounds", onBack = { page = null }) { SoundsPage() }
+            SettingsPage.BACKUP -> SubPage("Import / Export", onBack = { page = null }) { BackupPage() }
             SettingsPage.PERMISSIONS -> SubPage("Permissions", onBack = { page = null }) { PermissionsList() }
             SettingsPage.ABOUT -> SubPage("About", onBack = { page = null }) { AboutPage() }
         }
@@ -126,6 +128,11 @@ private fun Categories(onOpen: (SettingsPage) -> Unit) {
                 icon = { Icon(painterResource(R.drawable.ic_tab_alarm), null, tint = Nota.Mint, modifier = Modifier.size(24.dp)) },
                 title = "Alarm sounds", value = remember(default, timerDefault, sounds) { "Alarms: ${Sounds.name(ctx, default)} · Timers: ${Sounds.name(ctx, timerDefault, timer = true)}" },
                 onClick = { onOpen(SettingsPage.SOUNDS) },
+            )
+            CategoryRow(
+                icon = { Icon(painterResource(R.drawable.ic_folder), null, tint = Nota.Mint, modifier = Modifier.size(24.dp)) },
+                title = "Import / Export", value = "Move everything to another phone",
+                onClick = { onOpen(SettingsPage.BACKUP) },
             )
             var refresh by remember { androidx.compose.runtime.mutableIntStateOf(0) }
             androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { refresh++ }
@@ -437,4 +444,162 @@ private fun AboutCard(title: String, body: String) {
         Text(title, color = Nota.Mint, fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp)
         Text(body, style = MaterialTheme.typography.bodyMedium, color = Nota.Text)
     }
+}
+
+// ------------------------------------------------------------------------ Import / Export
+
+/** Export everything (passwords too, locked with the PIN) to a file, or replace everything from one. */
+@Composable
+private fun BackupPage() {
+    val ctx = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var busy by remember { mutableStateOf<String?>(null) }
+    var message by remember { mutableStateOf<String?>(null) }
+    // Export: PIN first (when there are passwords), then where to save.
+    var askExportPin by remember { mutableStateOf(false) }
+    var exportPin by remember { mutableStateOf<String?>(null) }
+    var exportVault by remember { mutableStateOf<dev.ray.reminders.data.VaultData?>(null) }
+    // Import: the chosen file, then PIN (if locked), then confirm.
+    var importBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var importPin by remember { mutableStateOf<String?>(null) }
+    var confirmImport by remember { mutableStateOf(false) }
+    var pinError by remember { mutableStateOf<String?>(null) }
+
+    val save = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri ->
+        if (uri == null) { exportVault = null; exportPin = null; return@rememberLauncherForActivityResult }
+        busy = "Exporting…"
+        scope.launch {
+            val ok = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val bytes = dev.ray.reminders.data.Backup.export(ctx, exportVault, exportPin)
+                    ctx.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(bytes) }
+                }.isSuccess
+            }
+            busy = null; exportVault = null; exportPin = null
+            message = if (ok) "Exported. Open this file in Nota on your other phone with Import." else "Couldn't save the file."
+        }
+    }
+    fun pickSaveSpot() = save.launch("Nota backup ${java.time.LocalDate.now()}.nota")
+
+    val open = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() } }.getOrNull()
+            }
+            if (bytes == null || bytes.size < 6 || String(bytes, 0, 4) != "NOTA") { message = "That isn't a Nota backup file."; return@launch }
+            importBytes = bytes
+            importPin = null
+            if (!dev.ray.reminders.data.Backup.isLocked(bytes)) confirmImport = true
+        }
+    }
+
+    Text(
+        "Export saves everything in Nota to one file: reminders, alarms, lists, notes, pictures, sounds, themes and your passwords. " +
+            "Passwords stay encrypted, locked with your passwords PIN. Import that file on another phone to bring it all over, PIN included.",
+        color = Nota.Sub, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+    )
+    SoftButton(
+        "Export to a file", color = Nota.Mint, height = 52.dp, modifier = Modifier.fillMaxWidth(),
+        onClick = { if (busy == null) { if (dev.ray.reminders.data.Vault.isSetUp(ctx)) { pinError = null; askExportPin = true } else pickSaveSpot() } },
+    )
+    SoftButton(
+        "Import from a file", height = 52.dp, modifier = Modifier.fillMaxWidth(),
+        onClick = { if (busy == null) open.launch(arrayOf("*/*")) },
+    )
+    Text(
+        "Importing replaces everything on this phone with what's in the file.",
+        color = Nota.Outline, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 4.dp),
+    )
+    busy?.let {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+            androidx.compose.material3.CircularProgressIndicator(color = Nota.Mint, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            Text(it, color = Nota.Sub, modifier = Modifier.padding(start = 10.dp))
+        }
+    }
+    message?.let { Text(it, color = Nota.Text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) }
+
+    if (askExportPin) BackupPinDialog(
+        "Enter your passwords PIN", "The file's passwords are locked with it.", pinError,
+        onDismiss = { askExportPin = false },
+    ) { pin ->
+        scope.launch {
+            val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { dev.ray.reminders.data.Vault.unlockWithPin(ctx, pin) }
+            when (result) {
+                is dev.ray.reminders.data.Vault.PinResult.Wrong -> pinError = "Wrong PIN."
+                is dev.ray.reminders.data.Vault.PinResult.LockedOut -> pinError = "Too many tries. Wait a bit and try again."
+                else -> {
+                    exportVault = dev.ray.reminders.data.Vault.data.value
+                    exportPin = pin
+                    dev.ray.reminders.data.Vault.lock()
+                    askExportPin = false
+                    pickSaveSpot()
+                }
+            }
+        }
+    }
+    if (importBytes != null && !confirmImport && importPin == null) BackupPinDialog(
+        "Enter the backup's PIN", "The passwords PIN from the phone this file came from.", pinError,
+        onDismiss = { importBytes = null; pinError = null },
+    ) { pin -> pinError = null; importPin = pin; confirmImport = true }
+    if (confirmImport && importBytes != null) AlertDialog(
+        onDismissRequest = { confirmImport = false; importBytes = null; importPin = null },
+        containerColor = Nota.Shelf,
+        title = { Text("Replace everything?") },
+        text = { Text("Everything on this phone will be replaced with the backup, then Nota restarts.", color = Nota.Sub) },
+        confirmButton = {
+            TextButton(onClick = {
+                val bytes = importBytes ?: return@TextButton
+                val pin = importPin
+                confirmImport = false
+                busy = "Importing…"
+                scope.launch {
+                    val error = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        runCatching { dev.ray.reminders.data.Backup.import(ctx, bytes, pin) }.exceptionOrNull()
+                    }
+                    busy = null
+                    when (error) {
+                        null -> dev.ray.reminders.data.Backup.restartApp(ctx)
+                        is dev.ray.reminders.data.Backup.WrongPin -> { pinError = "That PIN doesn't open this backup."; importPin = null }
+                        else -> { importBytes = null; message = "Couldn't import that file." }
+                    }
+                }
+            }) { Text("Replace", color = Nota.Error) }
+        },
+        dismissButton = { TextButton(onClick = { confirmImport = false; importBytes = null; importPin = null }) { Text("Cancel", color = Nota.Sub) } },
+    )
+}
+
+@Composable
+private fun BackupPinDialog(title: String, line: String, error: String?, onDismiss: () -> Unit, onDone: (String) -> Unit) {
+    var pin by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Nota.Shelf,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(line, color = Nota.Sub, style = MaterialTheme.typography.bodyMedium)
+                androidx.compose.material3.OutlinedTextField(
+                    pin, { v -> pin = v.filter { it.isDigit() }.take(4) }, singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                    shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Nota.Mint, unfocusedBorderColor = Nota.Outline, cursorColor = Nota.Mint,
+                        focusedTextColor = Nota.Text, unfocusedTextColor = Nota.Text,
+                    ),
+                )
+                if (error != null) Text(error, color = Nota.Error, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onDone(pin) }, enabled = pin.length == 4) { Text("Continue", color = if (pin.length == 4) Nota.Mint else Nota.Outline) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Nota.Sub) } },
+    )
 }

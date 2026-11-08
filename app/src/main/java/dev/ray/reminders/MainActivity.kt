@@ -110,6 +110,7 @@ class MainActivity : ComponentActivity() {
         // Nota is always dark, so always use light status/navigation bar icons.
         enableEdgeToEdge(SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.dark(Color.TRANSPARENT))
         Notifier.ensureChannels(this)
+        dev.ray.reminders.data.Backup.finishRestore(this)
         setContent { RemindersTheme { App(openTimer.intValue, openLists.intValue, openOther.value) } }
     }
 }

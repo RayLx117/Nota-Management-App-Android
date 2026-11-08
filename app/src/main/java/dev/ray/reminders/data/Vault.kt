@@ -96,6 +96,9 @@ object Vault {
         save(ctx, VaultData())
     }
 
+    /** Fills a freshly set-up vault with imported data (see [Backup]). */
+    fun restore(ctx: Context, data: VaultData) = save(ctx, data)
+
     fun changePin(ctx: Context, pin: String) {
         storePin(ctx, key ?: return, pin)
     }

@@ -96,6 +96,16 @@ object ReminderEngine {
         store(ctx).delete(id)
     }
 
+    /** Before an import replaces everything: cancel every alarm and notification the current data has. */
+    fun unscheduleAll(ctx: Context) {
+        for (r in store(ctx).all()) {
+            listOf(ACTION_FIRE, ACTION_NAG, ACTION_FULLSCREEN, ACTION_SNOOZE_END, ACTION_PREALERT, ACTION_END).forEach { cancel(ctx, it, r.id) }
+            Notifier.cancelUpcoming(ctx, r.id)
+            Notifier.cancelSnoozed(ctx, r.id)
+            Notifier.cancel(ctx, r.id)
+        }
+    }
+
     /** Make the reminder go off right now without touching its schedule (used by "Test"). */
     fun testNow(ctx: Context, id: Int) = activate(ctx, id)
 
