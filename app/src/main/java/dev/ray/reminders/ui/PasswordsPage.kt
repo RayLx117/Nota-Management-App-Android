@@ -385,11 +385,28 @@ private fun VaultContents(data: dev.ray.reminders.data.VaultData) {
             // Top level: passwords that aren't in a folder (folders are listed above them).
             else -> it.folderId == null || data.folders.none { f -> f.id == it.folderId }
         }
-    }.sortedBy { it.name.lowercase() }
+    }.sortedWith(compareBy<VaultEntry> { it.order }.thenBy { it.name.lowercase() })
+
+    // Hold to pick up a password: drag to reorder, or drop it on a folder.
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val arrange = rememberArrangeState(listState)
+    val wobble = rememberWobble()
+    val displayed = arrange.order?.let { o -> o.mapNotNull { id -> shown.firstOrNull { it.id == id } } } ?: shown
+    fun moveEntries(ids: Set<Int>, to: Int?) { Vault.move(ctx, ids, to); sel.clear() }
+    fun dropped(d: ArrangeState.Drop) {
+        when (val t = d.target) {
+            "out" -> moveEntries(sel.selected + d.id, null)
+            is String -> moveEntries(sel.selected + d.id, t.removePrefix("f").toIntOrNull())
+            else -> if (d.moved) Vault.arrange(ctx, d.order)
+        }
+    }
 
     Box(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Column(Modifier.fillMaxSize()) {
-            if (sel.active) SelectionBar(sel, "password", onDelete = { Vault.delete(ctx, it) })
+            if (sel.active) SelectionBar(
+                sel, "password", onDelete = { Vault.delete(ctx, it) },
+                extra = { MoveButton(data.folders.map { it.id to it.name }, folder?.id) { to -> moveEntries(sel.selected, to) } },
+            )
             else if (folder != null) FolderHeader(
                 folder.name, locked = false, onBack = { openFolder = null },
                 onRename = { renameFolder = true }, onDelete = { deleteFolder = true },
@@ -405,11 +422,15 @@ private fun VaultContents(data: dev.ray.reminders.data.VaultData) {
                 IconButton(onClick = { settings = true }) { Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = Nota.Sub) }
             }
             LazyColumn(
-                Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 12.dp, bottom = 110.dp),
+                Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(top = 12.dp, bottom = 110.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                if (folder == null && !searching && !sel.active) items(data.folders, key = { "f${it.id}" }) { f ->
-                    FolderRow(f.name, entries.count { it.folderId == f.id }, locked = false) { openFolder = f.id }
+                if (folder != null && arrange.dragging != null) item(key = "out") { DropOutRow(arrange.hover == "out") }
+                if (folder == null && !searching) items(data.folders, key = { "f${it.id}" }) { f ->
+                    FolderRow(
+                        f.name, entries.count { it.folderId == f.id }, locked = false,
+                        highlight = arrange.hover == "f${f.id}", modifier = Modifier.animateItem(),
+                    ) { openFolder = f.id }
                 }
                 if (shown.isEmpty() && (folder != null || data.folders.isEmpty() || searching)) item {
                     Text(
@@ -417,10 +438,13 @@ private fun VaultContents(data: dev.ray.reminders.data.VaultData) {
                         style = MaterialTheme.typography.bodyMedium, color = Nota.Sub, modifier = Modifier.padding(vertical = 8.dp),
                     )
                 }
-                items(shown, key = { it.id }) { e ->
+                items(displayed, key = { it.id }) { e ->
                     Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Nota.Shelf)
-                            .selectable(sel, e.id) { editing = e }.padding(start = 16.dp, end = 6.dp, top = 12.dp, bottom = 12.dp),
+                        (if (arrange.dragging == e.id) Modifier else Modifier.animateItem()).arrangeable(
+                            arrange, sel, e.id, enabled = !searching, wobble = wobble,
+                            order = { displayed.map { it.id } }, canSwap = { _, _ -> true },
+                            onOpen = { editing = e }, onDrop = ::dropped,
+                        ).fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Nota.Shelf).padding(start = 16.dp, end = 6.dp, top = 12.dp, bottom = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (sel.active) SelectCircle(sel.has(e.id), Modifier.padding(end = 12.dp))

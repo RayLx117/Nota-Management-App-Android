@@ -219,13 +219,34 @@ private fun NotesPage(onOpen: (Int) -> Unit, onNew: (Int, Int?) -> Unit, require
             folder != null -> n.folderId == folder.id
             else -> n.folderId == null || folders.none { it.id == n.folderId }
         }
-    }.sortedWith(compareByDescending<Note> { it.pinned }.thenByDescending { it.updatedAt })
+    }.sortedWith(compareByDescending<Note> { it.pinned }.thenBy { it.order }.thenByDescending { it.updatedAt })
     val folderLocked = folder?.locked == true && !unlocked
+
+    // Hold to pick up a note: drag to reorder, or drop it on a folder.
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val arrange = rememberArrangeState(listState)
+    val wobble = rememberWobble()
+    val displayed = arrange.order?.let { o -> o.mapNotNull { id -> shown.firstOrNull { it.id == id } } } ?: shown
+    fun moveNotes(ids: Set<Int>, to: Int?) {
+        val needsPin = folders.firstOrNull { it.id == to }?.locked == true || notes.any { it.id in ids && store.isProtected(it) }
+        val go = { store.move(ids, to); store.reconcile(ctx); sel.clear() }
+        if (needsPin) requireUnlock(go) else go()
+    }
+    fun dropped(d: ArrangeState.Drop) {
+        when (val t = d.target) {
+            "out" -> moveNotes(sel.selected + d.id, null)
+            is String -> moveNotes(sel.selected + d.id, t.removePrefix("f").toIntOrNull())
+            else -> if (d.moved) store.arrange(d.order)
+        }
+    }
 
     Box(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Column(Modifier.fillMaxSize()) {
             when {
-                sel.active -> SelectionBar(sel, "note", onDelete = { ids -> store.delete(ids); if (unlocked) Vault.removeSecretNotes(ctx, ids) })
+                sel.active -> SelectionBar(
+                    sel, "note", onDelete = { ids -> store.delete(ids); if (unlocked) Vault.removeSecretNotes(ctx, ids) },
+                    extra = { MoveButton(folders.map { it.id to it.name }, folder?.id) { to -> moveNotes(sel.selected, to) } },
+                )
                 folder != null -> FolderHeader(
                     folder.name, folder.locked, onBack = { openFolder = null },
                     onRename = { renameFolder = true },
@@ -255,11 +276,12 @@ private fun NotesPage(onOpen: (Int) -> Unit, onNew: (Int, Int?) -> Unit, require
                     SoftButton("Unlock", onClick = { requireUnlock {} }, color = Nota.Mint, height = 46.dp)
                 }
             } else LazyColumn(
-                Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 12.dp, bottom = 110.dp),
+                Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(top = 12.dp, bottom = 110.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                if (folder == null && !searching && !sel.active) items(folders, key = { "f${it.id}" }) { f ->
-                    FolderRow(f.name, notes.count { it.folderId == f.id }, f.locked) {
+                if (folder != null && arrange.dragging != null) item(key = "out") { DropOutRow(arrange.hover == "out") }
+                if (folder == null && !searching) items(folders, key = { "f${it.id}" }) { f ->
+                    FolderRow(f.name, notes.count { it.folderId == f.id }, f.locked, highlight = arrange.hover == "f${f.id}", modifier = Modifier.animateItem()) {
                         if (f.locked) requireUnlock { openFolder = f.id } else openFolder = f.id
                     }
                 }
@@ -269,10 +291,17 @@ private fun NotesPage(onOpen: (Int) -> Unit, onNew: (Int, Int?) -> Unit, require
                         style = MaterialTheme.typography.bodyMedium, color = Nota.Sub, modifier = Modifier.padding(vertical = 8.dp),
                     )
                 }
-                items(shown, key = { it.id }) { note ->
-                    NoteCard(note, hidden = note.encrypted && !unlocked, sel = sel, onOpen = {
-                        if (store.isProtected(note)) requireUnlock { onOpen(note.id) } else onOpen(note.id)
-                    })
+                items(displayed, key = { it.id }) { note ->
+                    NoteCard(
+                        note, hidden = note.encrypted && !unlocked, sel = sel,
+                        modifier = (if (arrange.dragging == note.id) Modifier else Modifier.animateItem()).arrangeable(
+                            arrange, sel, note.id, enabled = !searching, wobble = wobble,
+                            order = { displayed.map { it.id } },
+                            canSwap = { a, b -> shown.firstOrNull { it.id == a }?.pinned == shown.firstOrNull { it.id == b }?.pinned },
+                            onOpen = { if (store.isProtected(note)) requireUnlock { onOpen(note.id) } else onOpen(note.id) },
+                            onDrop = ::dropped,
+                        ),
+                    )
                 }
             }
         }
@@ -294,7 +323,7 @@ private fun NotesPage(onOpen: (Int) -> Unit, onNew: (Int, Int?) -> Unit, require
 }
 
 @Composable
-private fun NoteCard(note: Note, hidden: Boolean, sel: Selection, onOpen: () -> Unit) {
+private fun NoteCard(note: Note, hidden: Boolean, sel: Selection, modifier: Modifier) {
     val title = if (hidden) "Locked note" else note.title.ifBlank { note.body.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty() }
     val body = when {
         hidden -> ""
@@ -302,8 +331,7 @@ private fun NoteCard(note: Note, hidden: Boolean, sel: Selection, onOpen: () -> 
         else -> note.body
     }
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Nota.Shelf)
-            .selectable(sel, note.id, onOpen).padding(16.dp),
+        modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Nota.Shelf).padding(16.dp),
         verticalAlignment = Alignment.Top,
     ) {
         if (sel.active) SelectCircle(sel.has(note.id), Modifier.padding(end = 12.dp))

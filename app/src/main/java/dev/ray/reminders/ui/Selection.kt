@@ -84,6 +84,8 @@ fun SelectionBar(
     sel: Selection, noun: String, modifier: Modifier = Modifier,
     /** What deleting does; reminders/alarms by default. */
     onDelete: ((Set<Int>) -> Unit)? = null,
+    /** Extra buttons before the trash can (e.g. Move to folder). */
+    extra: (@Composable () -> Unit)? = null,
 ) {
     val ctx = LocalContext.current
     var confirm by remember { mutableStateOf(false) }
@@ -96,6 +98,7 @@ fun SelectionBar(
             "$n selected", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 26.sp, color = Nota.Text,
             modifier = Modifier.weight(1f).padding(start = 4.dp),
         )
+        extra?.invoke()
         IconButton(onClick = { confirm = true }) {
             Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = Nota.Error, modifier = Modifier.size(28.dp))
         }

@@ -1,6 +1,7 @@
 package dev.ray.reminders.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,9 +41,11 @@ import dev.ray.reminders.R
 
 /** A folder in a Notes or Passwords list. */
 @Composable
-fun FolderRow(name: String, count: Int, locked: Boolean, onClick: () -> Unit) {
+fun FolderRow(name: String, count: Int, locked: Boolean, highlight: Boolean = false, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Nota.Shelf).clickable(onClick = onClick)
+        modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(if (highlight) Nota.Raised else Nota.Shelf)
+            .then(if (highlight) Modifier.border(2.dp, Nota.Mint, RoundedCornerShape(18.dp)) else Modifier)
+            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -140,5 +143,37 @@ fun FolderPicker(folders: List<Pair<Int, String>>, current: Int?, onPick: (Int?)
             DropdownMenuItem(text = { Text("No folder") }, onClick = { open = false; onPick(null) })
             folders.forEach { (id, name) -> DropdownMenuItem(text = { Text(name) }, onClick = { open = false; onPick(id) }) }
         }
+    }
+}
+
+/** Folder-plus button for the selection bar: moves the selected items into a folder. */
+@Composable
+fun MoveButton(folders: List<Pair<Int, String>>, current: Int?, onMove: (Int?) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        androidx.compose.material3.IconButton(onClick = { open = true }) {
+            Icon(painterResource(R.drawable.ic_folder), contentDescription = "Move to folder", tint = Nota.Cyan, modifier = Modifier.size(26.dp))
+        }
+        DropdownMenu(open, onDismissRequest = { open = false }, containerColor = Nota.Raised) {
+            if (current != null) DropdownMenuItem(text = { Text("Out of this folder") }, onClick = { open = false; onMove(null) })
+            folders.filter { it.first != current }.forEach { (id, name) ->
+                DropdownMenuItem(text = { Text("Move to $name") }, onClick = { open = false; onMove(id) })
+            }
+            if (folders.none { it.first != current } && current == null) DropdownMenuItem(
+                text = { Text("Make a folder first", color = Nota.Sub) }, onClick = { open = false },
+            )
+        }
+    }
+}
+
+/** Shown at the top of an open folder while dragging: drop here to take it out of the folder. */
+@Composable
+fun DropOutRow(highlight: Boolean, modifier: Modifier = Modifier) {
+    Box(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(if (highlight) Nota.Raised else Nota.Shelf)
+            .border(2.dp, if (highlight) Nota.Mint else Nota.Outline, RoundedCornerShape(18.dp)).padding(vertical = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("Drop here to take it out of the folder", color = if (highlight) Nota.Text else Nota.Sub, style = MaterialTheme.typography.bodyMedium)
     }
 }

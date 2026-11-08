@@ -31,6 +31,8 @@ data class VaultEntry(
     val notes: String = "",
     val updatedAt: Long = System.currentTimeMillis(),
     val folderId: Int? = null,
+    /** Position when arranged by hand (lower = higher up). */
+    val order: Int = 0,
 )
 
 @Serializable
@@ -191,7 +193,22 @@ object Vault {
     fun upsert(ctx: Context, entry: VaultEntry) {
         val d = _data.value ?: return
         val list = d.entries
-        save(ctx, d.copy(entries = if (list.any { it.id == entry.id }) list.map { if (it.id == entry.id) entry else it } else list + entry))
+        save(ctx, d.copy(entries = if (list.any { it.id == entry.id }) list.map { if (it.id == entry.id) entry else it }
+            else list + entry.copy(order = (list.minOfOrNull { it.order } ?: 0) - 1)))
+    }
+
+    /** Saves a hand-arranged order: [ids] top to bottom. */
+    fun arrange(ctx: Context, ids: List<Int>) {
+        val d = _data.value ?: return
+        val pos = ids.withIndex().associate { it.value to it.index }
+        save(ctx, d.copy(entries = d.entries.map { e -> pos[e.id]?.let { e.copy(order = it) } ?: e }))
+    }
+
+    /** Moves passwords into a folder (null = out of any folder). */
+    fun move(ctx: Context, ids: Set<Int>, folderId: Int?) {
+        val d = _data.value ?: return
+        val top = (d.entries.filter { it.folderId == folderId }.minOfOrNull { it.order } ?: 0) - 1
+        save(ctx, d.copy(entries = d.entries.map { if (it.id in ids && it.folderId != folderId) it.copy(folderId = folderId, order = top) else it }))
     }
 
     fun delete(ctx: Context, ids: Set<Int>) {

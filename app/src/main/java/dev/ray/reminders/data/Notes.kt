@@ -21,6 +21,8 @@ data class Note(
     val locked: Boolean = false,
     /** True when the title/body live encrypted in the [Vault] and this entry is only a placeholder. */
     val encrypted: Boolean = false,
+    /** Position when arranged by hand (lower = higher up). New notes go on top. */
+    val order: Int = 0,
 ) {
     val isBlank get() = title.isBlank() && body.isBlank()
 }
@@ -89,7 +91,20 @@ class NotesStore private constructor(private val file: File) {
     fun newId() = (_notes.value.maxOfOrNull { it.id } ?: 0) + 1
 
     fun upsert(note: Note) = mutate { l ->
-        if (l.any { it.id == note.id }) l.map { if (it.id == note.id) note else it } else l + note
+        if (l.any { it.id == note.id }) l.map { if (it.id == note.id) note else it }
+        else l + note.copy(order = (l.minOfOrNull { it.order } ?: 0) - 1)
+    }
+
+    /** Saves a hand-arranged order: [ids] top to bottom. */
+    fun arrange(ids: List<Int>) = mutate { l ->
+        val pos = ids.withIndex().associate { it.value to it.index }
+        l.map { n -> pos[n.id]?.let { n.copy(order = it) } ?: n }
+    }
+
+    /** Moves notes into a folder (null = out of any folder). Call [reconcile] after, for locked folders. */
+    fun move(ids: Set<Int>, folderId: Int?) = mutate { l ->
+        val top = (l.filter { it.folderId == folderId }.minOfOrNull { it.order } ?: 0) - 1
+        l.map { if (it.id in ids && it.folderId != folderId) it.copy(folderId = folderId, order = top) else it }
     }
 
     fun delete(ids: Set<Int>) = mutate { l -> l.filterNot { it.id in ids } }
