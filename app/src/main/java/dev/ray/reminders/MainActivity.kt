@@ -146,6 +146,8 @@ private fun App(openTimer: Int, openLists: Int, openOther: Pair<String, Int>) {
     var prefill by remember { mutableStateOf<dev.ray.reminders.ui.Prefill?>(null) }
     val pager = rememberPagerState(initialPage = Tab.REMINDERS.ordinal) { Tab.entries.size }
     val scope = rememberCoroutineScope()
+    val switchFade = remember { androidx.compose.animation.core.Animatable(1f) }
+    var switching by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     androidx.compose.runtime.LaunchedEffect(openTimer) {
         if (openTimer > 0) { editingId = null; calendarKind = null; pager.scrollToPage(Tab.TIMER.ordinal) }
     }
@@ -209,7 +211,14 @@ private fun App(openTimer: Int, openLists: Int, openOther: Pair<String, Int>) {
         )
     } else
     Column(Modifier.fillMaxSize().background(Nota.Bg)) {
-        HorizontalPager(pager, modifier = Modifier.weight(1f), beyondViewportPageCount = 1, userScrollEnabled = false) { page ->
+        HorizontalPager(
+            pager, beyondViewportPageCount = 1, userScrollEnabled = false,
+            modifier = Modifier.weight(1f).graphicsLayer {
+                alpha = switchFade.value
+                val s = 0.97f + 0.03f * switchFade.value
+                scaleX = s; scaleY = s
+            },
+        ) { page ->
             when (Tab.entries[page]) {
                 Tab.TIMER -> dev.ray.reminders.ui.TimerScreen(visible = pager.currentPage == Tab.TIMER.ordinal)
                 Tab.ALARMS -> AlarmsScreen(
@@ -227,7 +236,22 @@ private fun App(openTimer: Int, openLists: Int, openOther: Pair<String, Int>) {
                 Tab.SETTINGS -> dev.ray.reminders.ui.SettingsScreen(visible = pager.currentPage == Tab.SETTINGS.ordinal)
             }
         }
-        ToolBar(pager.currentPage, onSelect = { scope.launch { pager.animateScrollToPage(it.ordinal) } })
+        ToolBar(pager.currentPage, onSelect = { tab ->
+            switching?.cancel()
+            switching = scope.launch {
+                val target = tab.ordinal
+                if (kotlin.math.abs(target - pager.currentPage) <= 1) {
+                    // Next door: a smooth slide (that page is already drawn).
+                    switchFade.snapTo(1f)
+                    pager.animateScrollToPage(target, animationSpec = androidx.compose.animation.core.tween(320, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+                } else {
+                    // Further away: fade through instead of racing past every tool in between.
+                    switchFade.animateTo(0f, androidx.compose.animation.core.tween(110))
+                    pager.scrollToPage(target)
+                    switchFade.animateTo(1f, androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.LinearOutSlowInEasing))
+                }
+            }
+        })
     }
     }
 }

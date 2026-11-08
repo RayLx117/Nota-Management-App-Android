@@ -31,8 +31,11 @@ android {
     }
 
     buildTypes {
+        // The APK Ray installs is the release build: same key as before (so it updates in place),
+        // but not debuggable, which makes Compose animations run much smoother.
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
@@ -54,6 +57,8 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.compose.ui:ui")
+    // Installs the Compose libraries' built-in performance profiles, so scrolling and transitions are smooth from the first launch.
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")

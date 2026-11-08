@@ -1,5 +1,6 @@
 package dev.ray.reminders.ui
 
+import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.graphicsLayer
@@ -215,6 +216,26 @@ fun CalendarScreen(
                     ) { _, dx -> total += dx }
                 },
             ) {
+            // Months slide in from the side you swiped toward.
+            androidx.compose.animation.AnimatedContent(
+                month,
+                transitionSpec = {
+                    val forward = targetState > initialState
+                    val ease = androidx.compose.animation.core.FastOutSlowInEasing
+                    (androidx.compose.animation.slideInHorizontally(androidx.compose.animation.core.tween(320, easing = ease)) { if (forward) it else -it } +
+                        androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220))) togetherWith
+                        (androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(320, easing = ease)) { if (forward) -it else it } +
+                            androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(180))) using
+                        androidx.compose.animation.SizeTransform(clip = true)
+                },
+                label = "month",
+            ) { month ->
+            val first = month.atDay(1)
+            val cells = (0 until 42).map { first.minusDays((first.dayOfWeek.value % 7).toLong()).plusDays(it.toLong()) }
+            val busy = remember(shown, month) {
+                cells.filter { d -> shown.any { it.enabled && occursOn(it, d, zone) } }.toSet()
+            }
+            Column {
             cells.chunked(7).forEach { week ->
                 Row {
                     week.forEach { d ->
@@ -245,6 +266,8 @@ fun CalendarScreen(
                         }
                     }
                 }
+            }
+            }
             }
             }
         }
