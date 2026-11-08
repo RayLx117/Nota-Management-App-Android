@@ -147,10 +147,9 @@ fun EditorScreen(existing: Reminder?, kind: Kind, newId: () -> Int, onClose: () 
                     },
                     startEpochDay = day.toEpochDay(), hour = (prefill?.minute ?: 540) / 60, minute = (prefill?.minute ?: 540) % 60,
                     weekdays = setOf(day.dayOfWeek.value),
-                    behavior = if (kind == Kind.REMINDER) Behavior(alarm = false) else Behavior(),
-                    sound = dev.ray.reminders.data.Sounds.default(ctx).value,
                     // New alarms give a heads-up before they ring.
-                    preAlert = kind == Kind.ALARM,
+                    behavior = if (kind == Kind.REMINDER) Behavior(alarm = false) else Behavior(preAlert = true),
+                    sound = dev.ray.reminders.data.Sounds.default(ctx).value,
                 )
             },
         )
