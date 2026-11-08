@@ -248,9 +248,10 @@ private fun ToolBar(current: Int, onSelect: (Tab) -> Unit) {
             Modifier.fillMaxWidth().clipToBounds().layout { m, c ->
                 val p = m.measure(c.copy(minHeight = 0, maxHeight = androidx.compose.ui.unit.Constraints.Infinity))
                 rowPx = p.height.toFloat().coerceAtLeast(1f)
-                val h = (p.height * open.value).toInt()
+                // The spring overshoots a touch past closed, so never go below zero height.
+                val h = (p.height * open.value.coerceIn(0f, 1f)).toInt()
                 layout(p.width, h) { p.place(0, 0) }
-            }.graphicsLayer { alpha = open.value },
+            }.graphicsLayer { alpha = open.value.coerceIn(0f, 1f) },
         ) {
             rows.drop(1).forEach { TabRow(it, current, onSelect) }
         }
