@@ -1,0 +1,46 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="@drawable/widget_bg"
+    android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="10dp" android:paddingBottom="10dp">
+
+    <!-- Next alarm -->
+    <LinearLayout android:id="@+id/alarm" android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1" android:orientation="horizontal" android:gravity="center_vertical">
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView android:id="@+id/alarm_label" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="NEXT ALARM" android:textColor="#FF8E9AB8" android:textSize="9sp" android:letterSpacing="0.15"
+                android:fontFamily="@font/outfit_semibold" />
+            <TextView android:id="@+id/alarm_time" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="#FFEEF2FA" android:textSize="24sp" android:fontFamily="@font/jetbrains_mono_semibold"
+                android:maxLines="1" android:text="7:00 AM" />
+            <TextView android:id="@+id/alarm_title" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="#FF8E9AB8" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" />
+        </LinearLayout>
+        <TextView android:id="@+id/alarm_in" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:textColor="#FF2EE59D" android:textSize="15sp" android:fontFamily="@font/outfit_extrabold"
+            android:maxLines="1" android:paddingStart="10dp" android:text="in 8 h" />
+    </LinearLayout>
+
+    <ImageView android:id="@+id/divider" android:layout_width="match_parent" android:layout_height="1dp"
+        android:src="@drawable/widget_chip" android:scaleType="fitXY" android:contentDescription="@null" />
+
+    <!-- Next reminder -->
+    <LinearLayout android:id="@+id/reminder" android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1" android:orientation="horizontal" android:gravity="center_vertical">
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView android:id="@+id/reminder_label" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="NEXT REMINDER" android:textColor="#FF8E9AB8" android:textSize="9sp" android:letterSpacing="0.15"
+                android:fontFamily="@font/outfit_semibold" />
+            <TextView android:id="@+id/reminder_title" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="#FFEEF2FA" android:textSize="17sp" android:fontFamily="@font/outfit_extrabold"
+                android:maxLines="1" android:ellipsize="end" android:text="Take vitamins" />
+            <TextView android:id="@+id/reminder_time" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="#FF8E9AB8" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" />
+        </LinearLayout>
+        <TextView android:id="@+id/reminder_in" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:textColor="#FF22C3E6" android:textSize="15sp" android:fontFamily="@font/outfit_extrabold"
+            android:maxLines="1" android:paddingStart="10dp" android:text="in 2 h" />
+    </LinearLayout>
+</LinearLayout>

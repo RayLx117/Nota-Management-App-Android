@@ -10,7 +10,7 @@ import kotlinx.serialization.json.Json
 import java.io.File
 
 /** Reminders are kept in a small JSON file and exposed as a StateFlow for the UI. */
-class ReminderStore private constructor(private val file: File) {
+class ReminderStore private constructor(private val file: File, private val onChange: () -> Unit = {}) {
 
     private val lock = Any()
     private val _items = MutableStateFlow(load())
@@ -41,6 +41,7 @@ class ReminderStore private constructor(private val file: File) {
         val updated = change(_items.value)
         _items.value = updated
         save(updated)
+        runCatching(onChange)
     }
 
     private fun load(): List<Reminder> = try {
@@ -62,7 +63,9 @@ class ReminderStore private constructor(private val file: File) {
         private var instance: ReminderStore? = null
 
         fun get(context: Context): ReminderStore = instance ?: synchronized(this) {
-            instance ?: ReminderStore(File(context.applicationContext.filesDir, "reminders.json"))
+            val app = context.applicationContext
+            // Keep the "Up next" widget current whenever anything changes.
+            instance ?: ReminderStore(File(app.filesDir, "reminders.json")) { dev.ray.reminders.widget.NextWidget.refresh(app) }
                 .also { instance = it }
         }
     }

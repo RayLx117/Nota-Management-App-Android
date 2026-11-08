@@ -62,10 +62,13 @@ class MainActivity : ComponentActivity() {
     /** Bumped whenever a notification asks us to open the Timer tab. */
     private val openTimer = androidx.compose.runtime.mutableIntStateOf(0)
     private val openLists = androidx.compose.runtime.mutableIntStateOf(0)
+    /** From the "Up next" widget: which tab to show, bumped each time. */
+    private val openOther = mutableStateOf("" to 0)
 
     private fun route(intent: android.content.Intent?) {
         when (intent?.getStringExtra(EXTRA_TAB)) {
             "timer" -> openTimer.intValue++
+            "alarms", "reminders" -> openOther.value = intent.getStringExtra(EXTRA_TAB)!! to openOther.value.second + 1
             "lists" -> {
                 openLists.intValue++
                 intent.getIntExtra(EXTRA_LIST, -1).takeIf { it >= 0 }?.let { dev.ray.reminders.ui.ListsNav.open.value = it }
@@ -101,7 +104,7 @@ class MainActivity : ComponentActivity() {
         // Nota is always dark, so always use light status/navigation bar icons.
         enableEdgeToEdge(SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.dark(Color.TRANSPARENT))
         Notifier.ensureChannels(this)
-        setContent { RemindersTheme { App(openTimer.intValue, openLists.intValue) } }
+        setContent { RemindersTheme { App(openTimer.intValue, openLists.intValue, openOther.value) } }
     }
 }
 
@@ -123,7 +126,7 @@ private enum class Tab(val label: String, val icon: Int) {
 private const val ROW_SIZE = 5
 
 @Composable
-private fun App(openTimer: Int, openLists: Int) {
+private fun App(openTimer: Int, openLists: Int, openOther: Pair<String, Int>) {
     val ctx = LocalContext.current
     CrashReport()
     val store = remember { ReminderStore.get(ctx) }
@@ -138,6 +141,10 @@ private fun App(openTimer: Int, openLists: Int) {
     val scope = rememberCoroutineScope()
     androidx.compose.runtime.LaunchedEffect(openTimer) {
         if (openTimer > 0) { editingId = null; calendarKind = null; pager.scrollToPage(Tab.TIMER.ordinal) }
+    }
+    androidx.compose.runtime.LaunchedEffect(openOther) {
+        val tab = when (openOther.first) { "alarms" -> Tab.ALARMS; "reminders" -> Tab.REMINDERS; else -> null }
+        if (openOther.second > 0 && tab != null) { editingId = null; calendarKind = null; pager.scrollToPage(tab.ordinal) }
     }
     androidx.compose.runtime.LaunchedEffect(openLists) {
         if (openLists > 0) { editingId = null; calendarKind = null; pager.scrollToPage(Tab.LISTS.ordinal) }

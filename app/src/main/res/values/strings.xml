@@ -5,5 +5,7 @@
     <string name="widget_all_lists_name">All lists</string>
     <string name="widget_all_lists_desc">Every list in one widget. Flip between them with the arrows.</string>
     <string name="widget_timer_name">Timer</string>
+    <string name="widget_next_name">Up next</string>
+    <string name="widget_next_desc">Your next alarm and next reminder, and how long until each.</string>
     <string name="widget_timer_desc">Start a preset in one tap and watch it count down.</string>
 </resources>
