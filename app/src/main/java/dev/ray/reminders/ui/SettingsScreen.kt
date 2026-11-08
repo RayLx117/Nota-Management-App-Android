@@ -33,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -61,12 +62,17 @@ import dev.ray.reminders.R
 import dev.ray.reminders.data.Sound
 import dev.ray.reminders.data.Sounds
 
-private enum class SettingsPage { THEME, SOUNDS }
+enum class SettingsPage { THEME, SOUNDS, PERMISSIONS, ABOUT }
+
+/** Ask the Settings tool to open a page (e.g. Permissions from the start-up prompt). */
+object SettingsNav { val open = kotlinx.coroutines.flow.MutableStateFlow<SettingsPage?>(null) }
 
 @Composable
 fun SettingsScreen(visible: Boolean) {
     var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
-    LaunchedEffect(visible) { if (!visible) page = null }
+    val requested by SettingsNav.open.collectAsState()
+    LaunchedEffect(requested) { requested?.let { page = it; SettingsNav.open.value = null } }
+    LaunchedEffect(visible) { if (!visible && requested == null) page = null }
     BackHandler(visible && page != null) { page = null }
     AnimatedContent(
         page,
@@ -81,6 +87,8 @@ fun SettingsScreen(visible: Boolean) {
             null -> Categories(onOpen = { page = it })
             SettingsPage.THEME -> SubPage("Theme", onBack = { page = null }) { ThemePage() }
             SettingsPage.SOUNDS -> SubPage("Alarm sounds", onBack = { page = null }) { SoundsPage() }
+            SettingsPage.PERMISSIONS -> SubPage("Permissions", onBack = { page = null }) { PermissionsList() }
+            SettingsPage.ABOUT -> SubPage("About", onBack = { page = null }) { AboutPage() }
         }
     }
 }
@@ -116,6 +124,19 @@ private fun Categories(onOpen: (SettingsPage) -> Unit) {
                 icon = { Icon(painterResource(R.drawable.ic_tab_alarm), null, tint = Nota.Mint, modifier = Modifier.size(24.dp)) },
                 title = "Alarm sounds", value = remember(default, sounds) { Sounds.name(ctx, default) },
                 onClick = { onOpen(SettingsPage.SOUNDS) },
+            )
+            var refresh by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+            androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { refresh++ }
+            val missing = remember(refresh) { ctx.missingRequired().size }
+            CategoryRow(
+                icon = { Icon(painterResource(R.drawable.ic_lock_open), null, tint = if (missing > 0) Nota.Error else Nota.Mint, modifier = Modifier.size(24.dp)) },
+                title = "Permissions", value = if (missing == 0) "All set" else "$missing need turning on",
+                onClick = { onOpen(SettingsPage.PERMISSIONS) },
+            )
+            CategoryRow(
+                icon = { Dot(size = 14.dp) },
+                title = "About", value = "What Nota does",
+                onClick = { onOpen(SettingsPage.ABOUT) },
             )
         }
     }
@@ -305,5 +326,41 @@ private fun SoundsPage() {
             confirmButton = { TextButton(onClick = { Sounds.remove(ctx, s.id); removing = null }) { Text("Remove", color = Nota.Error) } },
             dismissButton = { TextButton(onClick = { removing = null }) { Text("Cancel", color = Nota.Sub) } },
         )
+    }
+}
+
+// ------------------------------------------------------------------------ About
+
+@Composable
+private fun AboutPage() {
+    val ctx = LocalContext.current
+    val version = remember { runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull().orEmpty() }
+    Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.Top) {
+        Text("Nota", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 40.sp, color = Nota.Text)
+        Dot(size = 12.dp, modifier = Modifier.padding(start = 3.dp, top = 10.dp))
+    }
+    AboutCard(
+        "Everything in one place",
+        "Timers and a stopwatch, alarms, reminders that stay pinned until they're done, lists, and notes with a locked password vault. One app instead of five.",
+    )
+    AboutCard(
+        "Made to be yours",
+        "Pick a theme or mix your own colors. Give every alarm and timer its own sound, add pictures to reminders and list items, and sort notes into folders, locked behind your PIN or fingerprint if you like.",
+    )
+    AboutCard(
+        "Widgets that do things",
+        "Check items off a list, flip between lists, or start a timer preset right from your home screen, without opening the app.",
+    )
+    Text("Version $version", style = MaterialTheme.typography.bodySmall, color = Nota.Outline, modifier = Modifier.padding(top = 8.dp, start = 4.dp))
+}
+
+@Composable
+private fun AboutCard(title: String, body: String) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Nota.Shelf).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(title, color = Nota.Mint, fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp)
+        Text(body, style = MaterialTheme.typography.bodyMedium, color = Nota.Text)
     }
 }

@@ -145,6 +145,13 @@ private fun App(openTimer: Int, openLists: Int) {
 
     fun edit(kind: Kind, id: Int) { editingKind = kind; editingId = id }
 
+    // Opening Nota with essentials switched off: offer to go through them in Settings > Permissions.
+    dev.ray.reminders.ui.PermissionPrompt(onOpen = {
+        editingId = null; calendarKind = null
+        dev.ray.reminders.ui.SettingsNav.open.value = dev.ray.reminders.ui.SettingsPage.PERMISSIONS
+        scope.launch { pager.scrollToPage(Tab.SETTINGS.ordinal) }
+    })
+
     // The editor rises in gently over the lists, and sinks back out when closed.
     // Screens stack: tabs (0) < calendar (1) < editor (2). Deeper ones rise in; going back sinks them.
     androidx.compose.animation.AnimatedContent(
