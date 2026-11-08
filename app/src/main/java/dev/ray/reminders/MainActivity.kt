@@ -22,6 +22,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
@@ -123,6 +125,7 @@ private const val ROW_SIZE = 5
 @Composable
 private fun App(openTimer: Int, openLists: Int) {
     val ctx = LocalContext.current
+    CrashReport()
     val store = remember { ReminderStore.get(ctx) }
     val items by store.items.collectAsState()
     // What's open in the editor: null = nothing, otherwise (kind, id or NEW).
@@ -282,3 +285,32 @@ private fun TabItem(tab: Tab, selected: Boolean, modifier: Modifier, onClick: ()
         )
     }
 }
+
+/** After a crash: offer to copy what went wrong, so it can be sent over and fixed. */
+@Composable
+private fun CrashReport() {
+    val ctx = LocalContext.current
+    var report by remember { mutableStateOf(CrashLog.read(ctx)) }
+    val text = report ?: return
+    fun close() { CrashLog.clear(ctx); report = null }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = ::close,
+        containerColor = Nota.Shelf,
+        title = { Text("Nota crashed last time") },
+        text = {
+            Text(
+                text.lineSequence().take(8).joinToString("\n"), fontFamily = Nota.Mono, fontSize = 11.sp, color = Nota.Sub,
+                modifier = Modifier.heightIn(max = 260.dp).verticalScroll(androidx.compose.foundation.rememberScrollState()),
+            )
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("Nota crash", text))
+                close()
+            }) { Text("Copy details", color = Nota.Mint) }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = ::close) { Text("Dismiss", color = Nota.Sub) } },
+    )
+}
+
