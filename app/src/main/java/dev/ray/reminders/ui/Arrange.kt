@@ -8,6 +8,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.lazy.LazyListState
@@ -127,9 +128,27 @@ fun Modifier.arrangeable(
                 rotationZ = wobble.value * (if (id % 2 == 0) 0.9f else -0.9f)
             }
         }
-        .pointerInput(id, enabled) {
+        .pointerInput(id, enabled, sel.active) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
+                // Already wobbling: no need to hold again, just drag it (or tap to toggle).
+                if (sel.active && enabled) {
+                    val first = awaitTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
+                    if (first == null) {
+                        val last = currentEvent.changes.firstOrNull { it.id == down.id }
+                        if (last != null && !last.pressed && !last.isConsumed) { last.consume(); sel.toggle(id) }
+                        return@awaitEachGesture
+                    }
+                    if (!sel.has(id)) sel.toggle(id)
+                    state.start(id, currentOrder())
+                    state.drag(first.positionChange().y, swap)
+                    drag(first.id) { change ->
+                        state.drag(change.positionChange().y, swap)
+                        change.consume()
+                    }
+                    state.end()?.let(drop)
+                    return@awaitEachGesture
+                }
                 var cancelled = false
                 val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                     waitForUpOrCancellation().also { if (it == null) cancelled = true }
