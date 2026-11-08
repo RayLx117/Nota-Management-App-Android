@@ -128,7 +128,8 @@ fun Modifier.arrangeable(
                 rotationZ = wobble.value * (if (id % 2 == 0) 0.9f else -0.9f)
             }
         }
-        .pointerInput(id, enabled, sel.active) {
+        // Not keyed on selection: picking an item up selects it, and that mustn't restart the gesture.
+        .pointerInput(id, enabled) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 // Already wobbling: no need to hold again, just drag it (or tap to toggle).
