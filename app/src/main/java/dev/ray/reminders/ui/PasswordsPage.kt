@@ -84,6 +84,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.crypto.Cipher
 import kotlin.math.roundToInt
+import androidx.compose.animation.core.animateFloat
 
 // ------------------------------------------------------------------------ helpers
 
