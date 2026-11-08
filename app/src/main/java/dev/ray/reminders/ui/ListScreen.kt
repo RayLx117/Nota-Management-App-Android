@@ -1,5 +1,6 @@
 package dev.ray.reminders.ui
 
+import dev.ray.reminders.data.RepeatType
 import android.Manifest
 import androidx.compose.material3.Icon
 import androidx.compose.ui.res.painterResource
@@ -94,12 +95,6 @@ fun ListScreen(reminders: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Un
                     PermissionCards()
                 }
             }
-            item {
-                Text(
-                    "COMING UP", style = Nota.Label, color = Nota.Sub,
-                    modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp),
-                )
-            }
             if (upcoming.isEmpty()) item {
                 Text(
                     if (reminders.isEmpty()) "No reminders yet. Tap New reminder to add your first one."
@@ -108,9 +103,19 @@ fun ListScreen(reminders: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Un
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 )
             }
-            items(listOrder, key = { it.id }) { r ->
-                AnimatedVisibility(!r.isActive, enter = SLIDE_IN, exit = SLIDE_OUT) {
-                    UpcomingRow(r, sel, onClick = { onEdit(r.id) }, modifier = Modifier.glide(fx, r.id, this))
+            // Grouped by how often they come back: daily at the top, yearly (then one-time) at the bottom.
+            REPEAT_SECTIONS.forEach { (type, title) ->
+                val group = listOrder.filter { it.repeat == type }
+                if (group.isEmpty()) return@forEach
+                item(key = "section-$type") {
+                    AnimatedVisibility(group.any { !it.isActive }, enter = SLIDE_IN, exit = SLIDE_OUT) {
+                        RepeatHeader(title, group.count { !it.isActive })
+                    }
+                }
+                items(group, key = { it.id }) { r ->
+                    AnimatedVisibility(!r.isActive, enter = SLIDE_IN, exit = SLIDE_OUT) {
+                        UpcomingRow(r, sel, onClick = { onEdit(r.id) }, modifier = Modifier.glide(fx, r.id, this))
+                    }
                 }
             }
         }
@@ -119,6 +124,23 @@ fun ListScreen(reminders: List<Reminder>, onAdd: () -> Unit, onEdit: (Int) -> Un
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
         )
     }
+    }
+}
+
+private val REPEAT_SECTIONS = listOf(
+    RepeatType.DAILY to "Daily", RepeatType.WEEKLY to "Weekly", RepeatType.MONTHLY to "Monthly",
+    RepeatType.YEARLY to "Yearly", RepeatType.ONCE to "One time",
+)
+
+/** A section title with the theme's accent underline. */
+@Composable
+private fun RepeatHeader(title: String, count: Int) {
+    Row(Modifier.padding(start = 20.dp, end = 16.dp, top = 14.dp, bottom = 4.dp), verticalAlignment = Alignment.Bottom) {
+        Column(Modifier.width(androidx.compose.foundation.layout.IntrinsicSize.Max)) {
+            Text(title, fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = Nota.Text)
+            Box(Modifier.padding(top = 3.dp).fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(Nota.Mint))
+        }
+        Text("$count", style = MaterialTheme.typography.bodySmall, color = Nota.Sub, modifier = Modifier.padding(start = 8.dp, bottom = 4.dp))
     }
 }
 
