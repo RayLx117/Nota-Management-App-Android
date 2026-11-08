@@ -21,6 +21,9 @@ import dev.ray.reminders.data.Sounds
  * A foreground service keeps Nota alive while it rings; it shows the alarm's own notification.
  */
 object Ringer {
+    /** The notification each ringing alarm posted, for the ringing service to wear. */
+    val posted = java.util.concurrent.ConcurrentHashMap<Int, Notification>()
+
     private var player: MediaPlayer? = null
     private var vibrating = false
     /** Which notification is ringing, so the service can wear it. */
@@ -100,7 +103,10 @@ class RingService : Service() {
         val id = intent?.getIntExtra("id", 0)?.takeIf { it != 0 } ?: Ringer.currentId()
         val nm = getSystemService(NotificationManager::class.java)
         // Wear the alarm's own notification so nothing extra shows up in the bar.
-        val n = nm.activeNotifications.firstOrNull { it.id == id }?.notification
+        // Use the exact notification the alarm just posted. Looking it up can race the post and fall back to
+        // the quiet "Ringing" one, which replaced the alarm's heads-up banner when you were in another app.
+        val n = Ringer.posted[id]
+            ?: nm.activeNotifications.firstOrNull { it.id == id }?.notification
             ?: Notification.Builder(this, Notifier.CH_QUIET_ID).setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle("Ringing").build()
         runCatching {

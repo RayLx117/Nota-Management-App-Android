@@ -285,6 +285,7 @@ object Timer {
             .build()
         // A fresh post (not an update of the countdown notification) is what makes Android show it full screen.
         nm(ctx).cancel(NOTIF_ID)
+        Ringer.posted[NOTIF_ID] = n
         nm(ctx).notify(NOTIF_ID, n)
         Ringer.start(ctx, NOTIF_ID, s.sound, sound = !vibrateOnly(ctx), vibrate = true)
         // Screen already on and unlocked: Android shows a heads-up instead, so open the ringing screen ourselves
