@@ -1,5 +1,34 @@
 package dev.ray.reminders.ui
 
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.Composable
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Animatable
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -61,14 +90,14 @@ class AlarmActivity : ComponentActivity() {
                 LaunchedEffect(r?.isActive) { if (r == null || !r.isActive) finish() }
                 if (r != null) {
                     Column(
-                        Modifier.fillMaxSize().background(Nota.Bg).padding(28.dp),
-                        verticalArrangement = Arrangement.Center,
+                        Modifier.fillMaxSize().background(Nota.Bg).systemBarsPadding().padding(horizontal = 20.dp, vertical = 16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Dot(size = 14.dp)
-                        Spacer(Modifier.height(16.dp))
-                        Text(Describe.time(r), fontFamily = Nota.Mono, fontWeight = FontWeight.SemiBold, fontSize = 56.sp, color = Nota.Mint)
-                        Spacer(Modifier.height(12.dp))
+                        // Turning it off takes a deliberate slide at the top, so a sleepy tap can't do it.
+                        SlideToStop { ReminderEngine.done(this@AlarmActivity, id) }
+                        Spacer(Modifier.weight(1f))
+                        Text(Describe.time(r), fontFamily = Nota.Mono, fontWeight = FontWeight.SemiBold, fontSize = 60.sp, color = Nota.Mint)
+                        Spacer(Modifier.height(10.dp))
                         Text(
                             r.title, textAlign = TextAlign.Center, color = Nota.Text,
                             fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp,
@@ -79,19 +108,26 @@ class AlarmActivity : ComponentActivity() {
                         }
                         val picture = remember(r.imagePath) { r.imagePath?.let(Images::load)?.asImageBitmap() }
                         if (picture != null) {
-                            Spacer(Modifier.height(24.dp))
+                            Spacer(Modifier.height(20.dp))
                             Image(
                                 picture, contentDescription = null, contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(24.dp)),
+                                modifier = Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(24.dp)),
                             )
                         }
-                        Spacer(Modifier.height(48.dp))
-                        PrimaryButton("Done", onClick = { ReminderEngine.done(this@AlarmActivity, id) }, modifier = Modifier.fillMaxWidth(), height = 64.dp)
-                        Spacer(Modifier.height(12.dp))
-                        SoftButton(
-                            "Snooze ${Describe.minutes(r.fx.alarmSnoozeMinutes)}",
-                            onClick = { ReminderEngine.snooze(this@AlarmActivity, id, fromAlarm = true) }, modifier = Modifier.fillMaxWidth(), height = 56.dp,
-                        )
+                        Spacer(Modifier.weight(1f))
+                        // The big, easy target: snooze.
+                        Column(
+                            Modifier.fillMaxWidth().height(190.dp).clip(RoundedCornerShape(36.dp)).background(Nota.Mint)
+                                .clickable { ReminderEngine.snooze(this@AlarmActivity, id, fromAlarm = true) },
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text("Snooze", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 52.sp, color = Nota.Ink)
+                            Text(
+                                "for ${Describe.minutes(r.fx.alarmSnoozeMinutes)}", fontFamily = Nota.Outfit, fontWeight = FontWeight.SemiBold,
+                                fontSize = 18.sp, color = Nota.Ink.copy(alpha = 0.7f),
+                            )
+                        }
                     }
                 }
             }
@@ -102,5 +138,46 @@ class AlarmActivity : ComponentActivity() {
         fun intent(ctx: Context, id: Int): Intent = Intent(ctx, AlarmActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION)
             .putExtra(ReminderEngine.EXTRA_ID, id)
+    }
+}
+
+/** "Slide to turn off": drag the knob all the way to the right. Let go early and it springs back. */
+@Composable
+private fun SlideToStop(onStop: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val x = remember { Animatable(0f) }
+    var max by remember { mutableFloatStateOf(1f) }
+    var stopped by remember { mutableStateOf(false) }
+    val knob = 60.dp
+    val inset = 6.dp
+    val hint = rememberInfiniteTransition(label = "hint").animateFloat(
+        0.45f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "hintAlpha",
+    )
+    fun settle() = scope.launch {
+        if (x.value > max * 0.85f) { x.animateTo(max); if (!stopped) { stopped = true; onStop() } }
+        else x.animateTo(0f, spring(dampingRatio = 0.6f))
+    }
+    Box(
+        Modifier.fillMaxWidth().height(knob + inset * 2).clip(CircleShape).background(Nota.Raised)
+            .onSizeChanged { max = (it.width - with(density) { (knob + inset * 2).toPx() }).coerceAtLeast(1f) }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(onDragEnd = { settle() }, onDragCancel = { settle() }) { change, dx ->
+                    change.consume()
+                    scope.launch { x.snapTo((x.value + dx).coerceIn(0f, max)) }
+                }
+            },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            "Slide to turn off", fontFamily = Nota.Outfit, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = Nota.Text,
+            modifier = Modifier.align(Alignment.Center).padding(start = knob).graphicsLayer { alpha = hint.value * (1f - x.value / max) },
+        )
+        Box(
+            Modifier.padding(inset).offset { IntOffset(x.value.roundToInt(), 0) }.size(knob).clip(CircleShape).background(Nota.Mint),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Turn off", tint = Nota.Ink, modifier = Modifier.size(34.dp))
+        }
     }
 }

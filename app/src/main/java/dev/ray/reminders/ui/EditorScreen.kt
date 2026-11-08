@@ -149,6 +149,8 @@ fun EditorScreen(existing: Reminder?, kind: Kind, newId: () -> Int, onClose: () 
                     weekdays = setOf(day.dayOfWeek.value),
                     behavior = if (kind == Kind.REMINDER) Behavior(alarm = false) else Behavior(),
                     sound = dev.ray.reminders.data.Sounds.default(ctx).value,
+                    // New alarms give a heads-up before they ring.
+                    preAlert = kind == Kind.ALARM,
                 )
             },
         )
