@@ -25,6 +25,8 @@ data class Note(
     val order: Int = 0,
     /** Jotted down from the widget and not opened in the app yet (shows a dot). */
     val fresh: Boolean = false,
+    /** Came from the Quick note widget (listed under "Untitled Quicknotes" until it gets a title). */
+    val quick: Boolean = false,
 ) {
     val isBlank get() = title.isBlank() && body.isBlank()
 }
@@ -116,7 +118,7 @@ class NotesStore private constructor(private val file: File) {
 
     /** A quick note from the widget: no title, goes on top, marked new. */
     fun addQuick(text: String) = synchronized(lock) {
-        upsert(Note(id = newId(), body = text.trim(), fresh = true))
+        upsert(Note(id = newId(), body = text.trim(), fresh = true, quick = true))
     }
 
     fun delete(ids: Set<Int>) = mutate { l -> l.filterNot { it.id in ids } }

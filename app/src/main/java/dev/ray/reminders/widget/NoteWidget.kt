@@ -30,11 +30,9 @@ class NoteWidget : AppWidgetProvider() {
             rv.tintBackground(R.id.field, w.chip)
             rv.tintBackground(R.id.save, w.accent)
             rv.tintImage(R.id.save, w.ink)
-            rv.tintImage(R.id.icon, w.accent)
-            rv.tintImage(R.id.full_arrow, w.accent)
-            rv.setTextColor(R.id.label, w.sub)
+            rv.tintBackground(R.id.banner, w.chip)
+            rv.setTextColor(R.id.banner, w.accent)
             rv.setTextColor(R.id.field, w.sub)
-            rv.setTextColor(R.id.full, w.accent)
 
             val quick = PendingIntent.getActivity(
                 ctx, 81_000, Intent(ctx, QuickNoteActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),

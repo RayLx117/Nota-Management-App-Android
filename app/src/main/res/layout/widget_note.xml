@@ -1,21 +1,13 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent"
     android:orientation="vertical" android:background="@drawable/widget_bg"
-    android:paddingStart="14dp" android:paddingEnd="12dp" android:paddingTop="8dp" android:paddingBottom="10dp">
+    android:paddingStart="14dp" android:paddingEnd="12dp" android:paddingTop="10dp" android:paddingBottom="10dp">
 
-    <!-- Top banner: opens a new note in the full app. -->
-    <LinearLayout android:id="@+id/banner" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="2dp" android:paddingBottom="6dp">
-        <ImageView android:id="@+id/icon" android:layout_width="16dp" android:layout_height="16dp"
-            android:src="@drawable/ic_tab_notes" android:contentDescription="@null" />
-        <TextView android:id="@+id/label" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-            android:text="QUICK NOTE" android:textColor="#FF8E9AB8" android:textSize="10sp" android:letterSpacing="0.15"
-            android:fontFamily="@font/outfit_semibold" android:paddingStart="8dp" />
-        <TextView android:id="@+id/full" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Full note" android:textColor="#FF2EE59D" android:textSize="12sp" android:fontFamily="@font/outfit_semibold" />
-        <ImageView android:id="@+id/full_arrow" android:layout_width="16dp" android:layout_height="16dp"
-            android:src="@drawable/widget_next" android:contentDescription="@null" />
-    </LinearLayout>
+    <!-- Across the top: a new note in the full app. -->
+    <TextView android:id="@+id/banner" android:layout_width="match_parent" android:layout_height="34dp"
+        android:layout_marginBottom="8dp" android:background="@drawable/widget_pill" android:gravity="center"
+        android:text="Open note in app" android:textColor="#FF2EE59D" android:textSize="13sp"
+        android:fontFamily="@font/outfit_semibold" />
 
     <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
         android:orientation="horizontal" android:gravity="center_vertical">

@@ -95,11 +95,19 @@ class QuickNoteActivity : ComponentActivity() {
                                     focusedContainerColor = Nota.Raised, unfocusedContainerColor = Nota.Raised,
                                 ),
                             )
+                            // Plain until there's something to save, then it lights up in the accent.
+                            val ready = text.isNotBlank()
                             Box(
-                                Modifier.padding(start = 10.dp).size(64.dp).clip(CircleShape).background(Nota.Mint)
-                                    .alpha(if (text.isBlank()) 0.45f else 1f).clickable(enabled = text.isNotBlank()) { save() },
+                                Modifier.padding(start = 10.dp).size(64.dp).clip(CircleShape)
+                                    .background(if (ready) Nota.Mint else Nota.Raised)
+                                    .clickable(enabled = ready) { save() },
                                 contentAlignment = Alignment.Center,
-                            ) { Icon(Icons.Filled.Check, contentDescription = "Save note", tint = Nota.Ink, modifier = Modifier.size(34.dp)) }
+                            ) {
+                                Icon(
+                                    Icons.Filled.Check, contentDescription = "Save note", tint = if (ready) Nota.Ink else Nota.Outline,
+                                    modifier = Modifier.size(34.dp),
+                                )
+                            }
                         }
                     }
                 }

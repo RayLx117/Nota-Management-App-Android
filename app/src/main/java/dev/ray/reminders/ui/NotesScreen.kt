@@ -244,7 +244,11 @@ private fun NotesPage(onOpen: (Int) -> Unit, onNew: (Int, Int?) -> Unit, require
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val arrange = rememberArrangeState(listState)
     val wobble = rememberWobble()
-    val displayed = arrange.order?.let { o -> o.mapNotNull { id -> shown.firstOrNull { it.id == id } } } ?: shown
+    val ordered = arrange.order?.let { o -> o.mapNotNull { id -> shown.firstOrNull { it.id == id } } } ?: shown
+    // Widget notes without a title get their own section at the top (outside folders and search).
+    fun isQuick(n: Note) = (n.quick || n.fresh) && n.title.isBlank() && !n.encrypted
+    val quickNotes = if (folder == null && !searching) ordered.filter(::isQuick) else emptyList()
+    val displayed = quickNotes + ordered.filterNot { it in quickNotes }
     fun moveNotes(ids: Set<Int>, to: Int?) {
         val needsPin = folders.firstOrNull { it.id == to }?.locked == true || notes.any { it.id in ids && store.isProtected(it) }
         val go = { store.move(ids, to); store.reconcile(ctx); sel.clear() }
@@ -309,13 +313,16 @@ private fun NotesPage(onOpen: (Int) -> Unit, onNew: (Int, Int?) -> Unit, require
                         style = MaterialTheme.typography.bodyMedium, color = Nota.Sub, modifier = Modifier.padding(vertical = 8.dp),
                     )
                 }
-                items(displayed, key = { it.id }) { note ->
+                fun androidx.compose.foundation.lazy.LazyListScope.noteItems(list: List<Note>) = items(list, key = { it.id }) { note ->
                     NoteCard(
                         note, hidden = note.encrypted && !unlocked, sel = sel,
                         modifier = (if (arrange.dragging == note.id) Modifier else Modifier.animateItem()).arrangeable(
                             arrange, sel, note.id, enabled = !searching, wobble = wobble,
                             order = { displayed.map { it.id } },
-                            canSwap = { a, b -> shown.firstOrNull { it.id == a }?.pinned == shown.firstOrNull { it.id == b }?.pinned },
+                            canSwap = { a, b ->
+                                val x = shown.firstOrNull { it.id == a }; val y = shown.firstOrNull { it.id == b }
+                                x?.pinned == y?.pinned && (x in quickNotes) == (y in quickNotes)
+                            },
                             onOpen = {
                                 store.markSeen(note.id)
                                 if (store.isProtected(note)) requireUnlock { onOpen(note.id) } else onOpen(note.id)
@@ -324,6 +331,12 @@ private fun NotesPage(onOpen: (Int) -> Unit, onNew: (Int, Int?) -> Unit, require
                         ),
                     )
                 }
+                if (quickNotes.isNotEmpty()) {
+                    item(key = "quick_header") { QuickNotesHeader(Modifier.animateItem()) }
+                    noteItems(quickNotes)
+                    if (displayed.size > quickNotes.size) item(key = "quick_gap") { Spacer(Modifier.height(6.dp)) }
+                }
+                noteItems(displayed.drop(quickNotes.size))
             }
         }
         if (!sel.active && !folderLocked) AddButton(
@@ -340,6 +353,15 @@ private fun NotesPage(onOpen: (Int) -> Unit, onNew: (Int, Int?) -> Unit, require
     }
     if (deleteFolder && folder != null) ConfirmFolderDelete(folder.name, "notes", onDismiss = { deleteFolder = false }) {
         deleteFolder = false; store.deleteFolder(folder.id); store.reconcile(ctx); openFolder = null
+    }
+}
+
+/** "Untitled Quicknotes" with an underline in the theme's accent. */
+@Composable
+private fun QuickNotesHeader(modifier: Modifier = Modifier) {
+    Column(modifier.padding(start = 4.dp, top = 4.dp).width(androidx.compose.foundation.layout.IntrinsicSize.Max)) {
+        Text("Untitled Quicknotes", fontFamily = Nota.Outfit, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = Nota.Text)
+        Box(Modifier.padding(top = 4.dp).fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(Nota.Mint))
     }
 }
 
