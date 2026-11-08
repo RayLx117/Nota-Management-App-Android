@@ -80,7 +80,7 @@ data class Reminder(
     val weekdays: Set<Int> = emptySet(),
     /** Reminders: optional end time (minutes after midnight); the pinned notification clears itself then. */
     val endMinute: Int? = null,
-    /** Reminders: all day = notify at 9 AM and stay pinned until midnight; start/end times are ignored. */
+    /** Reminders: all day = notify at 5 AM and stay pinned until midnight; start/end times are ignored. */
     val allDay: Boolean = false,
     val enabled: Boolean = true,
     val behavior: Behavior = Behavior(),

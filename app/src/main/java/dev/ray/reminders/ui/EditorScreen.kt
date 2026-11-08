@@ -166,7 +166,7 @@ fun EditorScreen(existing: Reminder?, kind: Kind, newId: () -> Int, onClose: () 
         )
         cleaned = rollAlarm(cleaned)
         // All-day reminders go off at 9 AM.
-        if (cleaned.allDay) cleaned = cleaned.copy(hour = 9, minute = 0)
+        if (cleaned.allDay) cleaned = cleaned.copy(hour = 5, minute = 0)
         // Weekly and daily have no date picker: make sure they start no later than today.
         if (cleaned.repeat == RepeatType.WEEKLY || cleaned.repeat == RepeatType.DAILY) {
             cleaned = cleaned.copy(startEpochDay = minOf(cleaned.startEpochDay, LocalDate.now().toEpochDay()))

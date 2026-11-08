@@ -13,7 +13,8 @@ object Recurrence {
     fun next(r: Reminder, after: ZonedDateTime): ZonedDateTime? {
         val zone = after.zone
         val start = LocalDate.ofEpochDay(r.startEpochDay)
-        val time = LocalTime.of(r.hour, r.minute)
+        // All day starts at 5 AM (for early birds) and runs until midnight.
+        val time = if (r.allDay) LocalTime.of(5, 0) else LocalTime.of(r.hour, r.minute)
         val n = r.interval.coerceAtLeast(1).toLong()
         val afterDate = after.toLocalDate()
         fun at(d: LocalDate): ZonedDateTime = ZonedDateTime.of(d, time, zone)
