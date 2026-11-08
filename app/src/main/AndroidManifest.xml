@@ -89,6 +89,11 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_next_info" />
         </receiver>
 
+        <receiver android:name=".widget.CalendarWidget" android:exported="true" android:label="@string/widget_calendar_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_calendar_info" />
+        </receiver>
+
         <receiver android:name=".widget.NoteWidget" android:exported="true" android:label="@string/widget_note_name">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_note_info" />

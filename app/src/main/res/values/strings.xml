@@ -10,4 +10,6 @@
     <string name="widget_timer_desc">Start a preset in one tap and watch it count down.</string>
     <string name="widget_note_name">Quick note</string>
     <string name="widget_note_desc">Jot down a note and save it with one tap.</string>
+    <string name="widget_calendar_name">Calendar</string>
+    <string name="widget_calendar_desc">Your alarms and reminders by month. Tap a day to see what\'s on it.</string>
 </resources>

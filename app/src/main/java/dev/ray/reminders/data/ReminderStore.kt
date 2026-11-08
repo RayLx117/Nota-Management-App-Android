@@ -65,7 +65,10 @@ class ReminderStore private constructor(private val file: File, private val onCh
         fun get(context: Context): ReminderStore = instance ?: synchronized(this) {
             val app = context.applicationContext
             // Keep the "Up next" widget current whenever anything changes.
-            instance ?: ReminderStore(File(app.filesDir, "reminders.json")) { dev.ray.reminders.widget.NextWidget.refresh(app) }
+            instance ?: ReminderStore(File(app.filesDir, "reminders.json")) {
+                dev.ray.reminders.widget.NextWidget.refresh(app)
+                dev.ray.reminders.widget.CalendarWidget.refresh(app)
+            }
                 .also { instance = it }
         }
     }
