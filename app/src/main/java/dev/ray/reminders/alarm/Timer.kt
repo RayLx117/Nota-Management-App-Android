@@ -25,6 +25,8 @@ data class TimerState(
     val endAt: Long = 0,
     val remaining: Long = 0,
     val ringing: Boolean = false,
+    /** Sounds id; null = the default from Settings. */
+    val sound: String? = null,
 ) {
     val running get() = endAt > 0 && !ringing
     val paused get() = endAt == 0L && remaining > 0 && !ringing
@@ -37,7 +39,7 @@ data class TimerState(
 }
 
 @kotlinx.serialization.Serializable
-data class TimerPreset(val name: String = "", val seconds: Int)
+data class TimerPreset(val name: String = "", val seconds: Int, val sound: String? = null)
 
 object Timer {
     private val DEFAULT_PRESETS = listOf(TimerPreset(seconds = 600), TimerPreset(seconds = 900), TimerPreset(seconds = 1800))
@@ -73,8 +75,8 @@ object Timer {
     private const val CH_RUNNING = "timer_running"
     // Live Updates need a channel that isn't low importance; this one stays silent anyway.
     private const val CH_LIVE = "timer_live"
-    private const val CH_DONE = "timer_done"
-    private const val CH_DONE_VIBRATE = "timer_done_vibrate"
+    // Silent: the ringing service plays the timer's sound (see Ringer).
+    private const val CH_DONE = "timer_ring"
     private const val NOTIF_ID = 2_000_000
 
     private var flow: MutableStateFlow<TimerState>? = null
@@ -86,13 +88,13 @@ object Timer {
     private fun load(ctx: Context) = prefs(ctx).let {
         TimerState(
             it.getString("label", "") ?: "", it.getLong("duration", 0), it.getLong("endAt", 0),
-            it.getLong("remaining", 0), it.getBoolean("ringing", false),
+            it.getLong("remaining", 0), it.getBoolean("ringing", false), it.getString("sound", null),
         )
     }
 
     private fun set(ctx: Context, s: TimerState) {
         prefs(ctx).edit().putString("label", s.label).putLong("duration", s.durationMs).putLong("endAt", s.endAt)
-            .putLong("remaining", s.remaining).putBoolean("ringing", s.ringing).apply()
+            .putLong("remaining", s.remaining).putBoolean("ringing", s.ringing).putString("sound", s.sound).apply()
         (state(ctx) as MutableStateFlow).value = s
         dev.ray.reminders.widget.TimerWidget.refresh(ctx)
     }
@@ -104,10 +106,10 @@ object Timer {
     /** The wheels remember the last time you set. */
     fun lastDuration(ctx: Context) = prefs(ctx).getLong("last", 5 * 60_000L)
 
-    fun start(ctx: Context, durationMs: Long, label: String) {
+    fun start(ctx: Context, durationMs: Long, label: String, sound: String? = null) {
         if (durationMs <= 0) return
         prefs(ctx).edit().putLong("last", durationMs).apply()
-        run(ctx, TimerState(label = label.trim(), durationMs = durationMs), durationMs)
+        run(ctx, TimerState(label = label.trim(), durationMs = durationMs, sound = sound), durationMs)
     }
 
     private fun run(ctx: Context, base: TimerState, left: Long) {
@@ -157,6 +159,7 @@ object Timer {
     }
 
     private fun stopRinging(ctx: Context) {
+        Ringer.stop(ctx, NOTIF_ID)
         ctx.sendBroadcast(Intent(TimerActivity.ACTION_CLOSE).setPackage(ctx.packageName))
     }
 
@@ -189,6 +192,7 @@ object Timer {
     private fun unschedule(ctx: Context) = ctx.getSystemService(AlarmManager::class.java).cancel(pi(ctx, ACTION_DONE))
 
     private fun channels(ctx: Context) {
+        listOf("timer_done", "timer_done_vibrate").forEach { if (nm(ctx).getNotificationChannel(it) != null) nm(ctx).deleteNotificationChannel(it) }
         nm(ctx).createNotificationChannels(
             listOf(
                 NotificationChannel(CH_RUNNING, "Timer: counting down", NotificationManager.IMPORTANCE_LOW),
@@ -198,17 +202,8 @@ object Timer {
                     setShowBadge(false)
                 },
                 NotificationChannel(CH_DONE, "Timer: time's up", NotificationManager.IMPORTANCE_HIGH).apply {
-                    setSound(
-                        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
-                        AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build(),
-                    )
-                    enableVibration(true)
-                    vibrationPattern = longArrayOf(0, 800, 600, 800, 600)
-                },
-                NotificationChannel(CH_DONE_VIBRATE, "Timer: time's up (vibrate only)", NotificationManager.IMPORTANCE_HIGH).apply {
                     setSound(null, null)
-                    enableVibration(true)
-                    vibrationPattern = longArrayOf(0, 800, 600, 800, 600)
+                    enableVibration(false)
                 },
             ),
         )
@@ -254,7 +249,7 @@ object Timer {
             ctx, NOTIF_ID + 1, Intent(ctx, TimerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val n = Notification.Builder(ctx, if (vibrateOnly(ctx)) CH_DONE_VIBRATE else CH_DONE)
+        val n = Notification.Builder(ctx, CH_DONE)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Time's up")
             .setContentText(s.label.ifBlank { format(s.durationMs) + " timer" })
@@ -266,8 +261,8 @@ object Timer {
             .addAction(action(ctx, "Stop", ACTION_STOP))
             .addAction(action(ctx, "+1 min", ACTION_ADD))
             .build()
-        n.flags = n.flags or Notification.FLAG_INSISTENT
         nm(ctx).notify(NOTIF_ID, n)
+        Ringer.start(ctx, NOTIF_ID, s.sound, sound = !vibrateOnly(ctx), vibrate = true)
         // Screen already on and unlocked: Android shows a heads-up instead, so open the ringing screen ourselves
         // only when we're allowed to (the full-screen intent covers the locked case).
     }
@@ -289,7 +284,7 @@ class TimerReceiver : BroadcastReceiver() {
             Timer.ACTION_CANCEL, Timer.ACTION_STOP -> Timer.cancel(ctx)
             Timer.ACTION_START_PRESET -> Timer.presets(ctx).value.getOrNull(intent.getIntExtra("preset", -1))?.let {
                 if (!Timer.state(ctx).value.idle) Timer.cancel(ctx)
-                Timer.start(ctx, it.seconds * 1000L, it.name)
+                Timer.start(ctx, it.seconds * 1000L, it.name, it.sound)
             }
         }
     }

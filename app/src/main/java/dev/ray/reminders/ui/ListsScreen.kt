@@ -335,7 +335,7 @@ private fun ChecklistBody(list: NotaList, store: ListsStore) {
 
 // ------------------------------------------------------------------------ status list
 
-private val SECTION_COLORS = listOf(Nota.Mint, Nota.Cyan, Nota.Violet, Nota.Amber, Nota.Pink)
+private val SECTION_COLORS get() = listOf(Nota.Mint, Nota.Cyan, Nota.Violet, Nota.Amber, Nota.Pink)
 
 @Composable
 private fun StatusBody(

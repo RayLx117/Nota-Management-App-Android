@@ -22,6 +22,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
+import androidx.compose.foundation.gestures.draggable
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -101,7 +105,11 @@ private enum class Tab(val label: String, val icon: Int) {
     REMINDERS("Reminders", R.drawable.ic_tab_reminders),
     LISTS("Lists", R.drawable.ic_tab_lists),
     NOTES("Notes", R.drawable.ic_tab_notes),
+    // Second row, revealed by dragging the bar up.
+    SETTINGS("Settings", R.drawable.ic_tab_settings),
 }
+
+private const val ROW_SIZE = 5
 
 @Composable
 private fun App(openTimer: Int, openLists: Int) {
@@ -183,36 +191,85 @@ private fun App(openTimer: Int, openLists: Int) {
                 )
                 Tab.LISTS -> dev.ray.reminders.ui.ListsScreen()
                 Tab.NOTES -> dev.ray.reminders.ui.NotesScreen(visible = pager.currentPage == Tab.NOTES.ordinal)
+                Tab.SETTINGS -> dev.ray.reminders.ui.SettingsScreen(visible = pager.currentPage == Tab.SETTINGS.ordinal)
             }
         }
-        // Bottom bar: tap to jump, or swipe between screens.
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).background(Nota.Shelf)
-                .navigationBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
+        ToolBar(pager.currentPage, onSelect = { scope.launch { pager.animateScrollToPage(it.ordinal) } })
+    }
+    }
+}
+
+/**
+ * Bottom bar. The handle on top drags it up (or tap it) to reveal a second row of tools.
+ * Picking a tool from the first row tucks the second row away again.
+ */
+@Composable
+private fun ToolBar(current: Int, onSelect: (Tab) -> Unit) {
+    val scope = rememberCoroutineScope()
+    val open = remember { androidx.compose.animation.core.Animatable(0f) }
+    var rowPx by remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
+    fun settle(target: Float) = scope.launch { open.animateTo(target, androidx.compose.animation.core.spring(dampingRatio = 0.85f, stiffness = 500f)) }
+    val drag = androidx.compose.foundation.gestures.rememberDraggableState { dy ->
+        scope.launch { open.snapTo((open.value - dy / rowPx).coerceIn(0f, 1f)) }
+    }
+    val rows = Tab.entries.chunked(ROW_SIZE)
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).background(Nota.Shelf)
+            .draggable(
+                drag, androidx.compose.foundation.gestures.Orientation.Vertical,
+                onDragStopped = { v -> settle(if (v < -600f) 1f else if (v > 600f) 0f else if (open.value > 0.5f) 1f else 0f) },
+            )
+            .navigationBarsPadding(),
+    ) {
+        // The handle.
+        Box(
+            Modifier.fillMaxWidth().clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null,
+            ) { settle(if (open.targetValue > 0.5f) 0f else 1f) }.padding(top = 8.dp, bottom = 2.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Tab.entries.forEach { tab ->
-                val selected = pager.currentPage == tab.ordinal
-                Column(
-                    Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
-                        .clickable { scope.launch { pager.animateScrollToPage(tab.ordinal) } }
-                        .padding(vertical = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Box {
-                        Icon(
-                            painterResource(tab.icon), contentDescription = null, modifier = Modifier.size(24.dp),
-                            tint = if (selected) Nota.Text else Nota.Sub,
-                        )
-                        if (selected) Dot(size = 8.dp, modifier = Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-2).dp))
-                    }
-                    Text(
-                        tab.label, fontFamily = Nota.Outfit, fontSize = 12.sp,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (selected) Nota.Text else Nota.Sub, modifier = Modifier.padding(top = 4.dp),
-                    )
-                }
-            }
+            Box(Modifier.size(width = 36.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(Nota.Outline))
+        }
+        TabRow(rows[0], current) { onSelect(it); settle(0f) }
+        // Second row: grows from nothing as the bar is pulled up.
+        Box(
+            Modifier.fillMaxWidth().clipToBounds().layout { m, c ->
+                val p = m.measure(c.copy(minHeight = 0, maxHeight = androidx.compose.ui.unit.Constraints.Infinity))
+                rowPx = p.height.toFloat().coerceAtLeast(1f)
+                val h = (p.height * open.value).toInt()
+                layout(p.width, h) { p.place(0, 0) }
+            }.graphicsLayer { alpha = open.value },
+        ) {
+            rows.drop(1).forEach { TabRow(it, current, onSelect) }
         }
     }
+}
+
+@Composable
+private fun TabRow(tabs: List<Tab>, current: Int, onSelect: (Tab) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 8.dp)) {
+        tabs.forEach { tab -> TabItem(tab, current == tab.ordinal, Modifier.weight(1f)) { onSelect(tab) } }
+        repeat(ROW_SIZE - tabs.size) { androidx.compose.foundation.layout.Spacer(Modifier.weight(1f)) }
+    }
+}
+
+@Composable
+private fun TabItem(tab: Tab, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Column(
+        modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box {
+            Icon(
+                painterResource(tab.icon), contentDescription = null, modifier = Modifier.size(24.dp),
+                tint = if (selected) Nota.Text else Nota.Sub,
+            )
+            if (selected) Dot(size = 8.dp, modifier = Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-2).dp))
+        }
+        Text(
+            tab.label, fontFamily = Nota.Outfit, fontSize = 12.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (selected) Nota.Text else Nota.Sub, modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }

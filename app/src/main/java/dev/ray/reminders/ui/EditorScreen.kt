@@ -148,6 +148,7 @@ fun EditorScreen(existing: Reminder?, kind: Kind, newId: () -> Int, onClose: () 
                     startEpochDay = day.toEpochDay(), hour = (prefill?.minute ?: 540) / 60, minute = (prefill?.minute ?: 540) % 60,
                     weekdays = setOf(day.dayOfWeek.value),
                     behavior = if (kind == Kind.REMINDER) Behavior(alarm = false) else Behavior(),
+                    sound = dev.ray.reminders.data.Sounds.default(ctx).value,
                 )
             },
         )
@@ -615,6 +616,7 @@ private fun AlarmSettings(r: Reminder, onChange: (Reminder) -> Unit) {
     val b = r.behavior
     fun update(nb: Behavior) = onChange(r.copy(behavior = nb))
     SoundPicker(b.alertStyle, onPick = { update(b.copy(alertStyle = it)) })
+    AudioRow(r.sound, onPick = { onChange(r.copy(sound = it)) }, enabled = b.alertStyle != AlertStyle.VIBRATE_ONLY)
     Stepper("Snooze", Describe.minutes(b.alarmSnoozeMinutes),
         onMinus = { update(b.copy(alarmSnoozeMinutes = stepMinutes(b.alarmSnoozeMinutes, -1, min = 1))) },
         onPlus = { update(b.copy(alarmSnoozeMinutes = stepMinutes(b.alarmSnoozeMinutes, +1, min = 1))) })
@@ -702,6 +704,7 @@ private fun AlarmOnlySettings(r: Reminder, onChange: (Reminder) -> Unit) {
         SoundPicker(if (b.alertStyle == AlertStyle.SILENT) AlertStyle.SOUND_AND_VIBRATE else b.alertStyle, onPick = {
             update(b.copy(alertStyle = it))
         })
+        AudioRow(r.sound, onPick = { onChange(r.copy(sound = it)) }, enabled = b.alertStyle != AlertStyle.VIBRATE_ONLY)
         Stepper("Snooze", Describe.minutes(b.alarmSnoozeMinutes),
             onMinus = { update(b.copy(alarmSnoozeMinutes = stepMinutes(b.alarmSnoozeMinutes, -1, min = 1))) },
             onPlus = { update(b.copy(alarmSnoozeMinutes = stepMinutes(b.alarmSnoozeMinutes, +1, min = 1))) })

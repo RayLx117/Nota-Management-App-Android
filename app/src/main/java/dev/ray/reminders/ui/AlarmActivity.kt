@@ -2,13 +2,7 @@ package dev.ray.reminders.ui
 
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
-import android.media.Ringtone
-import android.media.RingtoneManager
 import android.os.Bundle
-import android.os.VibrationAttributes
-import android.os.VibrationEffect
-import android.os.VibratorManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -41,14 +35,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ray.reminders.alarm.ReminderEngine
-import dev.ray.reminders.data.AlertStyle
 import dev.ray.reminders.data.ReminderStore
 
 /** The full-screen "take over the phone" alarm. Rings until Done or Snooze. */
 class AlarmActivity : ComponentActivity() {
-
-    private var ringtone: Ringtone? = null
-    private var vibrating = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,7 +51,7 @@ class AlarmActivity : ComponentActivity() {
         if (reminder == null || !reminder.isActive) {
             finish(); return
         }
-        startAlarm(if (reminder.fx.alarmOn) reminder.fx.alertStyle else AlertStyle.SILENT)
+        // The sound and vibration come from the ringing service, so they keep going if this screen closes.
 
         setContent {
             RemindersTheme {
@@ -106,30 +96,6 @@ class AlarmActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    private fun startAlarm(style: AlertStyle) {
-        if (style == AlertStyle.SOUND_AND_VIBRATE || style == AlertStyle.SOUND_ONLY) {
-            ringtone = RingtoneManager.getRingtone(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))
-                ?.apply {
-                    audioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build()
-                    isLooping = true
-                    play()
-                }
-        }
-        if (style == AlertStyle.SOUND_AND_VIBRATE || style == AlertStyle.VIBRATE_ONLY) {
-            getSystemService(VibratorManager::class.java).defaultVibrator.vibrate(
-                VibrationEffect.createWaveform(longArrayOf(0, 800, 600), 0),
-                VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ALARM),
-            )
-            vibrating = true
-        }
-    }
-
-    override fun onDestroy() {
-        ringtone?.stop()
-        if (vibrating) getSystemService(VibratorManager::class.java).cancel()
-        super.onDestroy()
     }
 
     companion object {

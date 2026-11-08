@@ -46,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -67,6 +68,7 @@ import androidx.compose.ui.unit.sp
 import dev.ray.reminders.alarm.Stopwatch
 import dev.ray.reminders.alarm.Timer
 import dev.ray.reminders.alarm.TimerPreset
+import dev.ray.reminders.data.Sounds
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -209,6 +211,8 @@ private fun TimerSetup() {
     var m by rememberSaveable { mutableIntStateOf((last % 3600 / 60).toInt()) }
     var s by rememberSaveable { mutableIntStateOf((last % 60).toInt()) }
     var label by rememberSaveable { mutableStateOf("") }
+    // A preset brings its own sound; otherwise the default from Settings.
+    var sound by rememberSaveable { mutableStateOf<String?>(null) }
     val total = (h * 3600L + m * 60L + s) * 1000L
 
     Column(Modifier.fillMaxSize().padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -226,8 +230,9 @@ private fun TimerSetup() {
             onPick = { p ->
                 h = p.seconds / 3600; m = p.seconds % 3600 / 60; s = p.seconds % 60
                 label = p.name
+                sound = p.sound
             },
-            currentSeconds = (total / 1000).toInt(), currentName = label,
+            currentSeconds = (total / 1000).toInt(), currentName = label, currentSound = sound,
         )
 
         // Three wheels on one card, with a raised band marking the chosen row.
@@ -263,10 +268,11 @@ private fun TimerSetup() {
             options = listOf(AlertStyle.SOUND_AND_VIBRATE, AlertStyle.VIBRATE_ONLY),
             onPick = { vibrateOnly = it == AlertStyle.VIBRATE_ONLY; Timer.setVibrateOnly(ctx, vibrateOnly) },
         )
+        AudioRow(sound, onPick = { sound = it }, enabled = !vibrateOnly)
 
         Spacer(Modifier.weight(1f))
         PrimaryButton(
-            "Start", onClick = { Timer.start(ctx, total, label) },
+            "Start", onClick = { Timer.start(ctx, total, label, Sounds.resolve(ctx, sound)) },
             modifier = Modifier.fillMaxWidth().alpha(if (total > 0) 1f else 0.4f),
         )
     }
@@ -282,7 +288,7 @@ private val WHEEL_HEIGHT = 228.dp
 
 /** Quick-start chips, plus a pencil to save or remove your own named presets. */
 @Composable
-private fun PresetRow(onPick: (TimerPreset) -> Unit, currentSeconds: Int, currentName: String) {
+private fun PresetRow(onPick: (TimerPreset) -> Unit, currentSeconds: Int, currentName: String, currentSound: String?) {
     val ctx = LocalContext.current
     val presets by Timer.presets(ctx).collectAsState()
     var editing by remember { mutableStateOf(false) }
@@ -315,12 +321,21 @@ private fun PresetRow(onPick: (TimerPreset) -> Unit, currentSeconds: Int, curren
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Filled.Edit, contentDescription = "Edit presets", tint = Nota.Mint, modifier = Modifier.size(20.dp)) }
     }
-    if (editing) PresetsDialog(presets, currentSeconds, currentName, onDismiss = { editing = false })
+    if (editing) PresetsDialog(presets, currentSeconds, currentName, currentSound, onDismiss = { editing = false })
 }
 
 @Composable
-private fun PresetsDialog(presets: List<TimerPreset>, currentSeconds: Int, currentName: String, onDismiss: () -> Unit) {
+private fun PresetsDialog(presets: List<TimerPreset>, currentSeconds: Int, currentName: String, currentSound: String?, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
+    var soundFor by remember { mutableStateOf<Int?>(null) }
+    soundFor?.let { i ->
+        presets.getOrNull(i)?.let { p ->
+            SoundPickerDialog(Sounds.resolve(ctx, p.sound), onPick = { id ->
+                Timer.setPresets(ctx, presets.mapIndexed { j, q -> if (j == i) q.copy(sound = id) else q })
+                soundFor = null
+            }, onDismiss = { soundFor = null })
+        }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Nota.Shelf,
@@ -336,6 +351,17 @@ private fun PresetsDialog(presets: List<TimerPreset>, currentSeconds: Int, curre
                         Column(Modifier.weight(1f)) {
                             Text(p.name.ifBlank { Timer.shortDuration(p.seconds) }, color = Nota.Text, fontFamily = Nota.Outfit, fontWeight = FontWeight.SemiBold)
                             if (p.name.isNotBlank()) Text(Timer.shortDuration(p.seconds), color = Nota.Sub, fontSize = 13.sp)
+                            Row(
+                                Modifier.padding(top = 4.dp).clip(RoundedCornerShape(8.dp)).clickable { soundFor = i }
+                                    .padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(painterResource(dev.ray.reminders.R.drawable.ic_music), null, tint = Nota.Mint, modifier = Modifier.size(14.dp))
+                                Text(
+                                    Sounds.name(ctx, p.sound), color = Nota.Mint, fontSize = 13.sp, maxLines = 1,
+                                    modifier = Modifier.padding(start = 4.dp),
+                                )
+                            }
                         }
                         IconButton(onClick = { Timer.setPresets(ctx, presets.filterIndexed { j, _ -> j != i }) }) {
                             Icon(Icons.Filled.Close, contentDescription = "Remove", tint = Nota.Error)
@@ -347,7 +373,7 @@ private fun PresetsDialog(presets: List<TimerPreset>, currentSeconds: Int, curre
                 SoftButton(
                     if (canSave) "Save " + (currentName.trim().ifBlank { Timer.shortDuration(currentSeconds) }) + " as a preset"
                     else "Set a time to save it as a preset",
-                    onClick = { if (canSave) Timer.setPresets(ctx, presets + TimerPreset(currentName.trim(), currentSeconds)) },
+                    onClick = { if (canSave) Timer.setPresets(ctx, presets + TimerPreset(currentName.trim(), currentSeconds, Sounds.resolve(ctx, currentSound))) },
                     color = if (canSave) Nota.Mint else Nota.Sub, height = 46.dp, modifier = Modifier.fillMaxWidth(),
                 )
                 Text(

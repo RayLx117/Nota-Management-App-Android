@@ -4,13 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.media.AudioAttributes
-import android.media.Ringtone
-import android.media.RingtoneManager
 import android.os.Bundle
-import android.os.VibrationAttributes
-import android.os.VibrationEffect
-import android.os.VibratorManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -45,7 +39,7 @@ class TimerActivity : ComponentActivity() {
         setTurnScreenOn(true)
         if (!Timer.state(this).value.ringing) { finish(); return }
         registerReceiver(closer, IntentFilter(ACTION_CLOSE), RECEIVER_NOT_EXPORTED)
-        // The sound comes from the insistent "time's up" notification, which keeps ringing until it's cleared.
+        // The sound comes from the ringing service, which keeps going until Stop or +1 min.
         setContent {
             RemindersTheme {
                 val t by Timer.state(this).collectAsState()

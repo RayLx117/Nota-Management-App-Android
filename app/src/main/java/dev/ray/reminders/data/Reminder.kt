@@ -87,6 +87,8 @@ data class Reminder(
     /** Optional picture shown in the notification and on the full-screen alarm (a file in app storage). */
     val imagePath: String? = null,
     val imageStyle: ImageStyle = ImageStyle.BANNER,
+    /** What the alarm rings with (a Sounds id); null = the default from Settings. */
+    val sound: String? = null,
 
     // ---- runtime state, managed by ReminderEngine ----
     /** Next scheduled occurrence (epoch millis), or null if none. */

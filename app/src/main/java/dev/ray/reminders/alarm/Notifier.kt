@@ -28,12 +28,15 @@ object Notifier {
     private const val CH_SOUND_ONLY = "alert_sound_only"
     private const val CH_NOTIFY = "notification_sound"
     private const val CH_QUIET = "quiet"
-    private const val CH_ALARM = "alarm"
+    const val CH_QUIET_ID = CH_QUIET
+    // Silent: the ringing service plays the alarm's own sound (see Ringer).
+    private const val CH_ALARM = "alarm_ring"
 
     private val VIBRATION = longArrayOf(0, 400, 250, 400, 250, 400)
 
     fun ensureChannels(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
+        if (nm.getNotificationChannel("alarm") != null) nm.deleteNotificationChannel("alarm")
         nm.createNotificationChannels(
             listOf(
                 NotificationChannel(CH_SOUND, "Reminders: sound + vibration", NotificationManager.IMPORTANCE_HIGH).apply {
@@ -53,12 +56,8 @@ object Notifier {
                     description = "Silent reminders, and sticky reminders brought back after a swipe"
                 },
                 NotificationChannel(CH_ALARM, "Full-screen alarms", NotificationManager.IMPORTANCE_HIGH).apply {
-                    setSound(
-                        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
-                        AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build(),
-                    )
-                    enableVibration(true)
-                    vibrationPattern = VIBRATION
+                    setSound(null, null)
+                    enableVibration(false)
                 },
             ),
         )
@@ -159,6 +158,11 @@ object Notifier {
         }
         if (alert) nm.cancel(r.id) // a fresh post re-alerts reliably and moves it to the top
         nm.notify(r.id, builder.build())
+        if (channel == CH_ALARM) Ringer.start(
+            ctx, r.id, r.sound,
+            sound = style == AlertStyle.SOUND_AND_VIBRATE || style == AlertStyle.SOUND_ONLY,
+            vibrate = style == AlertStyle.SOUND_AND_VIBRATE || style == AlertStyle.VIBRATE_ONLY,
+        )
     }
 
     private const val UPCOMING_OFFSET = 1_000_000
@@ -195,6 +199,7 @@ object Notifier {
     }
 
     fun cancel(ctx: Context, id: Int) {
+        Ringer.stop(ctx, id)
         ctx.getSystemService(NotificationManager::class.java).cancel(id)
     }
 }

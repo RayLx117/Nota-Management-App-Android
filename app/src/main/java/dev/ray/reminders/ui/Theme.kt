@@ -34,16 +34,20 @@ import dev.ray.reminders.data.RepeatType
 
 /** Nota's "Shelf" look: deep navy, mint dot, cyan accents (from the app icon). */
 object Nota {
-    val Bg = Color(0xFF0B1020)
-    val Shelf = Color(0xFF151C30)
-    val Raised = Color(0xFF1F2842)
-    val Line = Color(0xFF1A2238)
-    val Outline = Color(0xFF34405F)
-    val Text = Color(0xFFEEF2FA)
-    val Sub = Color(0xFF8E9AB8)
-    val Ink = Color(0xFF06121A)
-    val Mint = Color(0xFF2EE59D)
-    val Cyan = Color(0xFF22C3E6)
+    // Background, accent and highlight come from Settings > Theme; the rest is derived from them.
+    val Bg get() = ThemeStore.colors.bg
+    val Shelf get() = ThemeStore.colors.shelf
+    val Raised get() = ThemeStore.colors.raised
+    val Line get() = ThemeStore.colors.line
+    val Outline get() = ThemeStore.colors.outline
+    val Text get() = ThemeStore.colors.text
+    val Sub get() = ThemeStore.colors.sub
+    /** Text and icons drawn on the accent color. */
+    val Ink get() = ThemeStore.colors.ink
+    /** The accent (mint in the default theme). */
+    val Mint get() = ThemeStore.colors.accent
+    /** The highlight (cyan in the default theme). */
+    val Cyan get() = ThemeStore.colors.highlight
     val Violet = Color(0xFF8B7CFF)
     val Amber = Color(0xFFFFC857)
     val Pink = Color(0xFFFF7AB6)
@@ -68,7 +72,7 @@ object Nota {
     }
 }
 
-private val scheme = darkColorScheme(
+private fun scheme() = darkColorScheme(
     primary = Nota.Mint, onPrimary = Nota.Ink,
     secondary = Nota.Cyan, onSecondary = Nota.Ink,
     tertiary = Nota.Violet,
@@ -101,6 +105,10 @@ private val typography = Typography().let { t ->
 
 @Composable
 fun RemindersTheme(content: @Composable () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.remember { ThemeStore.ensure(ctx) }
+    val colors = ThemeStore.colors
+    val scheme = androidx.compose.runtime.remember(colors) { scheme() }
     MaterialTheme(colorScheme = scheme, typography = typography, content = content)
 }
 
