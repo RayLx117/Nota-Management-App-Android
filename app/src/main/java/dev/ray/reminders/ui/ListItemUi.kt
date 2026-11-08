@@ -143,7 +143,7 @@ fun ListItemCard(
 
 /** Picture for a list item: add, replace or remove it, and choose how it shows. */
 @Composable
-fun ItemPictureSection(path: String?, style: ListImageStyle, onPath: (String?) -> Unit, onStyle: (ListImageStyle) -> Unit) {
+fun ItemPictureSection(path: String?, style: ListImageStyle, query: String, onPath: (String?) -> Unit, onStyle: (ListImageStyle) -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -153,9 +153,14 @@ fun ItemPictureSection(path: String?, style: ListImageStyle, onPath: (String?) -
     }
     fun pick() = picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     val bitmap = remember(path) { path?.let(Images::load)?.asImageBitmap() }
+    var finding by remember { androidx.compose.runtime.mutableStateOf(false) }
+    if (finding) FindPictureDialog(query, onPicked = { onPath(it); finding = false }, onDismiss = { finding = false })
     Text("PICTURE", style = Nota.Label, color = Nota.Sub, modifier = Modifier.padding(top = 4.dp))
     if (bitmap == null) {
-        SoftButton("Add picture", onClick = ::pick, color = Nota.Mint, height = 46.dp, modifier = Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SoftButton("Add picture", onClick = ::pick, color = Nota.Mint, height = 46.dp, modifier = Modifier.weight(1f))
+            SoftButton("Find a picture", onClick = { finding = true }, height = 46.dp, modifier = Modifier.weight(1f))
+        }
         return
     }
     Image(
@@ -167,6 +172,7 @@ fun ItemPictureSection(path: String?, style: ListImageStyle, onPath: (String?) -
     }
     Row {
         TextButton(onClick = ::pick) { Text("Replace", color = Nota.Mint) }
+        TextButton(onClick = { finding = true }) { Text("Find another", color = Nota.Mint) }
         TextButton(onClick = { onPath(null) }) { Text("Remove", color = Nota.Sub) }
     }
 }

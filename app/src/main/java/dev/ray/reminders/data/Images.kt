@@ -28,6 +28,21 @@ object Images {
         null
     }
 
+    /** Same as [import], for a file already on the phone (e.g. a downloaded picture). */
+    fun importFile(ctx: Context, file: File): String? = try {
+        val bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(file)) { decoder, info, _ ->
+            val w = info.size.width
+            if (w > MAX_WIDTH) decoder.setTargetSize(MAX_WIDTH, info.size.height * MAX_WIDTH / w)
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        }
+        val dir = File(ctx.filesDir, "images").apply { mkdirs() }
+        val out = File(dir, "${UUID.randomUUID()}.jpg")
+        out.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+        out.absolutePath
+    } catch (e: Exception) {
+        null
+    }
+
     /** A 3:1 centre-cropped strip, kept small so it fits in a notification's custom view. */
     fun banner(src: Bitmap): Bitmap {
         val ratio = 3f

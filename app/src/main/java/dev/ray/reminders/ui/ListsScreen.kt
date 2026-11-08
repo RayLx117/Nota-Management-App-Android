@@ -542,7 +542,7 @@ private fun ItemDialog(list: NotaList, item: ListItem, onDismiss: () -> Unit, on
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     shape = RoundedCornerShape(16.dp), colors = fieldColors(), modifier = Modifier.fillMaxWidth(),
                 )
-                ItemPictureSection(imagePath, imageStyle, onPath = { imagePath = it }, onStyle = { imageStyle = it })
+                ItemPictureSection(imagePath, imageStyle, query = text, onPath = { imagePath = it }, onStyle = { imageStyle = it })
                 if (sectioned) {
                     Text("CATEGORIES", style = Nota.Label, color = Nota.Sub, modifier = Modifier.padding(top = 4.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

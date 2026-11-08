@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Only for "Find a picture" (photo search). -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- Auto-granted exact alarms for alarm/reminder apps (Android 13+). -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <!-- Android 14+: the user may need to allow this in Settings for full-screen alarms. -->

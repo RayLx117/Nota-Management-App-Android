@@ -403,6 +403,8 @@ private fun BannerSection(r: Reminder, onChange: (Reminder) -> Unit) {
     fun pick() = picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
 
     val bitmap = remember(r.imagePath) { r.imagePath?.let(Images::load)?.asImageBitmap() }
+    var finding by remember { mutableStateOf(false) }
+    if (finding) FindPictureDialog(r.title, onPicked = { onChange(r.copy(imagePath = it, imageStyle = ImageStyle.BANNER)); finding = false }, onDismiss = { finding = false })
     if (bitmap != null) {
         Image(
             bitmap, contentDescription = "Banner", contentScale = ContentScale.Crop,
@@ -410,11 +412,15 @@ private fun BannerSection(r: Reminder, onChange: (Reminder) -> Unit) {
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = ::pick) { Text("Change banner", color = Nota.Mint) }
+            TextButton(onClick = { finding = true }) { Text("Find another", color = Nota.Mint) }
             Spacer(Modifier.weight(1f))
             TextButton(onClick = { onChange(r.copy(imagePath = null)) }) { Text("Remove", color = Nota.Sub) }
         }
     } else {
-        SoftButton("Add Banner", onClick = ::pick, height = 44.dp, color = Nota.Mint)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SoftButton("Add Banner", onClick = ::pick, height = 44.dp, color = Nota.Mint, modifier = Modifier.weight(1f))
+            SoftButton("Find a picture", onClick = { finding = true }, height = 44.dp, modifier = Modifier.weight(1f))
+        }
     }
     if (failed) Text("Couldn't open that picture.", color = Nota.Error, style = MaterialTheme.typography.bodySmall)
 }
