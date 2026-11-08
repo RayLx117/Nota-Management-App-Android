@@ -282,7 +282,7 @@ private fun UnlockChooser(message: String?, onPin: () -> Unit, onFingerprint: ()
         ) {
             Icon(painterResource(R.drawable.ic_fingerprint), contentDescription = "Unlock with fingerprint", tint = Nota.Mint, modifier = Modifier.size(38.dp))
         }
-        Spacer(Modifier.height(120.dp))
+        Spacer(Modifier.height(18.dp))
     }
 }
 
