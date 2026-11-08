@@ -55,11 +55,12 @@ fun FindPictureDialog(initial: String, onPicked: (String) -> Unit, onDismiss: ()
     var results by remember { mutableStateOf<List<ImageSearch.Result>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf<String?>(null) }
+    var source by remember { mutableStateOf(ImageSearch.Source.PHOTOS) }
 
-    LaunchedEffect(searched) {
+    LaunchedEffect(searched, source) {
         if (searched.isBlank()) { results = emptyList(); return@LaunchedEffect }
         results = null; error = null
-        runCatching { withContext(Dispatchers.IO) { ImageSearch.search(searched) } }
+        runCatching { withContext(Dispatchers.IO) { ImageSearch.search(searched, source) } }
             .onSuccess { results = it }
             .onFailure { results = emptyList(); error = "Couldn't search. Check your internet connection." }
     }
@@ -70,7 +71,10 @@ fun FindPictureDialog(initial: String, onPicked: (String) -> Unit, onDismiss: ()
         title = { Text("Find a picture") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SearchField(query, { query = it }, "Search photos", Modifier.fillMaxWidth())
+                SearchField(query, { query = it }, "Search pictures", Modifier.fillMaxWidth())
+                androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ImageSearch.Source.entries.forEach { s -> DotChip(s.label, s == source) { source = s } }
+                }
                 TextButton(onClick = { searched = query.trim() }, enabled = query.isNotBlank() && query.trim() != searched) {
                     Text("Search", color = if (query.isNotBlank() && query.trim() != searched) Nota.Mint else Nota.Outline)
                 }
@@ -98,7 +102,12 @@ fun FindPictureDialog(initial: String, onPicked: (String) -> Unit, onDismiss: ()
                         }
                     }
                 }
-                Text("Openly licensed photos from Openverse.", color = Nota.Outline, style = MaterialTheme.typography.bodySmall)
+                Text(
+                    when (source) {
+                        ImageSearch.Source.PHOTOS -> "Openly licensed photos from Openverse."
+                        ImageSearch.Source.WIKIPEDIA -> "Pictures from Wikipedia articles."
+                        ImageSearch.Source.ANIME -> "Covers and banners from AniList."
+                    }, color = Nota.Outline, style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = {},
