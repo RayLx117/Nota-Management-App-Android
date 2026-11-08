@@ -1,5 +1,12 @@
 package dev.ray.reminders.ui
 
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.launch
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import android.text.format.DateFormat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -113,6 +120,11 @@ fun CalendarScreen(
     val cells = (0 until 42).map { gridStart.plusDays(it.toLong()) }
     var hidden by remember { mutableStateOf(CalendarFilter.hidden(ctx, kind)) }
     var filtering by remember { mutableStateOf(false) }
+    var pickingMonth by remember { mutableStateOf(false) }
+    if (pickingMonth) MonthYearDialog(month, onDismiss = { pickingMonth = false }) { picked ->
+        monthOffset = ((picked.year - today.year) * 12 + (picked.monthValue - today.monthValue))
+        pickingMonth = false
+    }
     val shown = remember(items, hidden) { items.filter { it.repeat !in hidden } }
     val busy = remember(shown, month) {
         cells.filter { d -> shown.any { it.enabled && occursOn(it, d, zone) } }.toSet()
@@ -174,7 +186,8 @@ fun CalendarScreen(
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous month", tint = Nota.Mint)
                 }
                 Text(
-                    month.format(DateTimeFormatter.ofPattern("MMMM yyyy")), modifier = Modifier.weight(1f),
+                    month.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
+                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable { pickingMonth = true }.padding(vertical = 8.dp),
                     fontFamily = Nota.Outfit, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = Nota.Text,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
@@ -190,6 +203,18 @@ fun CalendarScreen(
                     )
                 }
             }
+            // Swipe left/right across the days for the next/previous month.
+            Column(
+                Modifier.pointerInput(Unit) {
+                    var total = 0f
+                    detectHorizontalDragGestures(
+                        onDragStart = { total = 0f },
+                        onDragEnd = {
+                            if (total < -size.width / 6f) monthOffset++ else if (total > size.width / 6f) monthOffset--
+                        },
+                    ) { _, dx -> total += dx }
+                },
+            ) {
             cells.chunked(7).forEach { week ->
                 Row {
                     week.forEach { d ->
@@ -220,6 +245,7 @@ fun CalendarScreen(
                         }
                     }
                 }
+            }
             }
         }
 
@@ -291,5 +317,78 @@ fun CalendarButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
             androidx.compose.ui.res.painterResource(dev.ray.reminders.R.drawable.ic_calendar), contentDescription = "Calendar",
             tint = Nota.Mint, modifier = Modifier.size(20.dp),
         )
+    }
+}
+
+/** "Scroll window": month and year wheels. */
+@Composable
+private fun MonthYearDialog(current: YearMonth, onDismiss: () -> Unit, onPick: (YearMonth) -> Unit) {
+    val years = remember { (YearMonth.now().year - 10..YearMonth.now().year + 30).toList() }
+    var monthIndex by remember { mutableIntStateOf(current.monthValue - 1) }
+    var yearIndex by remember { mutableIntStateOf(years.indexOf(current.year).coerceAtLeast(0)) }
+    val months = remember { java.time.Month.entries.map { it.getDisplayName(TextStyle.FULL, Locale.getDefault()) } }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Nota.Shelf,
+        title = { Text("Go to month") },
+        text = {
+            Box(Modifier.fillMaxWidth().height(WHEEL_H), contentAlignment = Alignment.Center) {
+                // The band behind the selected row.
+                Box(Modifier.fillMaxWidth().height(ROW_H).clip(RoundedCornerShape(14.dp)).background(Nota.Raised))
+                Row(Modifier.fillMaxSize()) {
+                    TextWheel(months, monthIndex, { monthIndex = it }, Modifier.weight(1.4f))
+                    TextWheel(years.map { it.toString() }, yearIndex, { yearIndex = it }, Modifier.weight(1f))
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = { onPick(YearMonth.of(years[yearIndex], monthIndex + 1)) }) { Text("Go", color = Nota.Mint) }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel", color = Nota.Sub) } },
+    )
+}
+
+private val ROW_H = 44.dp
+private val WHEEL_H = 220.dp
+
+@Composable
+private fun TextWheel(labels: List<String>, value: Int, onChange: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val state = androidx.compose.foundation.pager.rememberPagerState(initialPage = value) { labels.size }
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val report by androidx.compose.runtime.rememberUpdatedState(onChange)
+    LaunchedEffect(state) {
+        var first = true
+        androidx.compose.runtime.snapshotFlow { state.currentPage }.collect {
+            if (!first) haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+            first = false
+        }
+    }
+    LaunchedEffect(state) { androidx.compose.runtime.snapshotFlow { state.settledPage }.collect { report(it) } }
+    androidx.compose.foundation.pager.VerticalPager(
+        state = state,
+        pageSize = androidx.compose.foundation.pager.PageSize.Fixed(ROW_H),
+        contentPadding = PaddingValues(vertical = (WHEEL_H - ROW_H) / 2),
+        beyondViewportPageCount = 3,
+        flingBehavior = androidx.compose.foundation.pager.PagerDefaults.flingBehavior(
+            state, pagerSnapDistance = androidx.compose.foundation.pager.PagerSnapDistance.atMost(labels.size),
+        ),
+        modifier = modifier.fillMaxHeight(),
+    ) { page ->
+        val distance = kotlin.math.abs((page - state.currentPage) - state.currentPageOffsetFraction)
+        val closeness = 1f - distance.coerceAtMost(2.5f) / 2.5f
+        Box(
+            Modifier.fillMaxWidth().height(ROW_H)
+                .clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) {
+                    scope.launch { state.animateScrollToPage(page) }
+                }
+                .graphicsLayer { val sc = 0.75f + 0.25f * closeness; scaleX = sc; scaleY = sc; alpha = 0.25f + 0.75f * closeness },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                labels[page], fontFamily = Nota.Outfit, fontWeight = FontWeight.SemiBold, fontSize = 20.sp,
+                color = androidx.compose.ui.graphics.lerp(Nota.Sub, Nota.Text, closeness), maxLines = 1,
+            )
+        }
     }
 }
